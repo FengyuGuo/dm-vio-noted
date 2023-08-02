@@ -441,7 +441,7 @@ std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* frame_hessian, So
 		{
 			std::cout << "WARNING: Coarse tracker thinks that tracking was not good!" << std::endl;
 			// In IMU mode we can still estimate the pose sufficiently, even if vision is bad.
-			trackingIsGood = true;
+			trackingIsGood = true; // in vio mode we trust IMU
 		}
 
 		if(i != 0)
@@ -663,7 +663,7 @@ void FullSystem::activatePointsMT()
 //				immature_invalid_deleted++;
 				// remove point.
 				delete ph;
-				host->immaturePoints[i]=0;
+				host->immaturePoints[i]=nullptr;
 				continue;
 			}
 
@@ -685,7 +685,7 @@ void FullSystem::activatePointsMT()
 				{
 //					immature_notReady_deleted++;
 					delete ph;
-					host->immaturePoints[i]=0;
+					host->immaturePoints[i]=nullptr;
 				}
 //				immature_notReady_skipped++;
 				continue;
@@ -711,7 +711,7 @@ void FullSystem::activatePointsMT()
 			else
 			{
 				delete ph;
-				host->immaturePoints[i]=0;
+				host->immaturePoints[i]=nullptr;
 			}
 		}
 	}
@@ -746,7 +746,7 @@ void FullSystem::activatePointsMT()
 		}
 		else if(newpoint == (PointHessian*)((long)(-1)) || ph->lastTraceStatus==IPS_OOB)
 		{
-			ph->host->immaturePoints[ph->idxInImmaturePoints]=0;
+			ph->host->immaturePoints[ph->idxInImmaturePoints]=nullptr;
             delete ph;
 		}
 		else
@@ -1016,8 +1016,14 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
             }
             imuIntegration.addIMUDataToBA(*imuData);
         }
-
+		/**
+		 * 1. get the coarse rotation and translation estimation
+		 * 2. get the residuals
+		 */
         std::pair<Vec4, bool> pair = trackNewCoarse(frame_hessian, referenceToFramePassed);
+
+		//======================= key frame management stuff ================================
+		//check the movement and photometric changes to decide if new key frame is necessary
         dso::Vec4 tres = std::move(pair.first);
         bool forceNoKF = !pair.second; // If coarse tracking was bad don't make KF.
         bool forceKF = false;
@@ -1074,6 +1080,7 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
 		    std::cout << "Forcing NO KF!" << std::endl;
 		    needToMakeKF = false;
         }
+		//================================= end of key frame management stuff =============================================
 
         if(needToMakeKF)
         {
@@ -1226,12 +1233,12 @@ void FullSystem::mappingLoop()
 			if(!runMapping) return;
 		}
 
-		FrameHessian* fh = unmappedTrackedFrames.front();
+		FrameHessian* frame_hessian = unmappedTrackedFrames.front();
 		unmappedTrackedFrames.pop_front();
 
         if(!setting_debugout_runquiet)
         {
-            std::cout << "Current mapping id: " << fh->shell->id << " create KF after: " << needNewKFAfter << std::endl;
+            std::cout << "Current mapping id: " << frame_hessian->shell->id << " create KF after: " << needNewKFAfter << std::endl;
         }
 
         // guaranteed to make a KF for the very first two tracked frames.
@@ -1239,10 +1246,10 @@ void FullSystem::mappingLoop()
 		{
             if(setting_useIMU)
             {
-                imuIntegration.keyframeCreated(fh->shell->id);
+                imuIntegration.keyframeCreated(frame_hessian->shell->id);
             }
             lock.unlock();
-			makeKeyFrame(fh);
+			makeKeyFrame(frame_hessian);
 			lock.lock();
 			mappedFrameSignal.notify_all();
 			continue;
@@ -1255,7 +1262,7 @@ void FullSystem::mappingLoop()
 		if(unmappedTrackedFrames.size() > 0) // if there are other frames to track, do that first.
 		{
 
-			if(setting_useIMU && needNewKFAfter == fh->shell->id)
+			if(setting_useIMU && needNewKFAfter == frame_hessian->shell->id)
 			{
                 if(!dso::setting_debugout_runquiet)
                 {
@@ -1266,41 +1273,41 @@ void FullSystem::mappingLoop()
 			}
 
 			lock.unlock();
-			makeNonKeyFrame(fh);
+			makeNonKeyFrame(frame_hessian);
 			lock.lock();
 
 			if(needToKetchupMapping && unmappedTrackedFrames.size() > 0)
 			{
-				FrameHessian* fh = unmappedTrackedFrames.front();
+				FrameHessian* frame_hessian = unmappedTrackedFrames.front();
 				unmappedTrackedFrames.pop_front();
 				{
 					boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-					assert(fh->shell->trackingRef != 0);
-					fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
-					fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
+					assert(frame_hessian->shell->trackingRef != 0);
+					frame_hessian->shell->camToWorld = frame_hessian->shell->trackingRef->camToWorld * frame_hessian->shell->camToTrackingRef;
+					frame_hessian->setEvalPT_scaled(frame_hessian->shell->camToWorld.inverse(),frame_hessian->shell->aff_g2l);
 				}
-				delete fh;
+				delete frame_hessian;
 			}
 
 		}
 		else
 		{
-		    bool createKF = setting_useIMU ? needNewKFAfter==fh->shell->id : needNewKFAfter >= frameHessians.back()->shell->id;
+		    bool createKF = setting_useIMU ? needNewKFAfter==frame_hessian->shell->id : needNewKFAfter >= frameHessians.back()->shell->id;
 			if(setting_realTimeMaxKF || createKF)
 			{
                 if(setting_useIMU)
                 {
-                    imuIntegration.keyframeCreated(fh->shell->id);
+                    imuIntegration.keyframeCreated(frame_hessian->shell->id);
                 }
                 lock.unlock();
-				makeKeyFrame(fh);
+				makeKeyFrame(frame_hessian);
 				needToKetchupMapping=false;
 				lock.lock();
 			}
 			else
 			{
 				lock.unlock();
-				makeNonKeyFrame(fh);
+				makeNonKeyFrame(frame_hessian);
 				lock.lock();
 			}
 		}
@@ -1335,39 +1342,39 @@ void FullSystem::makeNonKeyFrame( FrameHessian* fh)
 	delete fh;
 }
 
-void FullSystem::makeKeyFrame( FrameHessian* fh)
+void FullSystem::makeKeyFrame( FrameHessian* frame_hessian)
 {
     dmvio::TimeMeasurement timeMeasurement("makeKeyframe");
 	// needs to be set by mapping thread
 	{
 		boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-		assert(fh->shell->trackingRef != 0);
-		fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
-		fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
-		int prevKFId = fh->shell->trackingRef->id;
-		int framesBetweenKFs = fh->shell->id - prevKFId - 1;
+		assert(frame_hessian->shell->trackingRef != 0);
+		frame_hessian->shell->camToWorld = frame_hessian->shell->trackingRef->camToWorld * frame_hessian->shell->camToTrackingRef;
+		frame_hessian->setEvalPT_scaled(frame_hessian->shell->camToWorld.inverse(),frame_hessian->shell->aff_g2l);
+		int prevKFId = frame_hessian->shell->trackingRef->id;
+		int framesBetweenKFs = frame_hessian->shell->id - prevKFId - 1;
         if(!setting_debugout_runquiet)
         {
             std::cout << "Frames between KFs: " << framesBetweenKFs << std::endl;
         }
     }
 
-	traceNewCoarse(fh);
+	traceNewCoarse(frame_hessian);
 
 	boost::unique_lock<boost::mutex> lock(mapMutex);
 
 	// =========================== Flag Frames to be Marginalized. =========================
-	flagFramesForMarginalization(fh);
+	flagFramesForMarginalization(frame_hessian);
 
 
 	// =========================== add New Frame to Hessian Struct. =========================
     dmvio::TimeMeasurement timeMeasurementAddFrame("newFrameAndNewResidualsForOldPoints");
-	fh->idx = frameHessians.size();
-	frameHessians.push_back(fh);
-	fh->frameID = allKeyFramesHistory.size();
-    fh->shell->keyframeId = fh->frameID;
-	allKeyFramesHistory.push_back(fh->shell);
-	ef->insertFrame(fh, &Hcalib);
+	frame_hessian->idx = frameHessians.size();
+	frameHessians.push_back(frame_hessian);
+	frame_hessian->frameID = allKeyFramesHistory.size();
+    frame_hessian->shell->keyframeId = frame_hessian->frameID;
+	allKeyFramesHistory.push_back(frame_hessian->shell);
+	ef->insertFrame(frame_hessian, &Hcalib);
 
 	setPrecalcValues();
 
@@ -1377,10 +1384,10 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 	int numFwdResAdde=0;
 	for(FrameHessian* fh1 : frameHessians)		// go through all active frames
 	{
-		if(fh1 == fh) continue;
+		if(fh1 == frame_hessian) continue;
 		for(PointHessian* ph : fh1->pointHessians)
 		{
-			PointFrameResidual* r = new PointFrameResidual(ph, fh1, fh);
+			PointFrameResidual* r = new PointFrameResidual(ph, fh1, frame_hessian);
 			r->setState(ResState::IN);
 			ph->residuals.push_back(r);
 			ef->insertResidual(r);
@@ -1403,12 +1410,12 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
     if(setting_useGTSAMIntegration)
     {
         // Adds new keyframe to the BA graph, together with matching factors (e.g. IMUFactors).
-        baIntegration->addKeyframeToBA(fh->shell->id, fh->shell->camToWorld, ef->frames);
+        baIntegration->addKeyframeToBA(frame_hessian->shell->id, frame_hessian->shell->camToWorld, ef->frames);
     }
 
 	// =========================== OPTIMIZE ALL =========================
 
-	fh->frameEnergyTH = frameHessians.back()->frameEnergyTH;
+	frame_hessian->frameEnergyTH = frameHessians.back()->frameEnergyTH;
 	float rmse = optimize(setting_maxOptIterations);
 
 
@@ -1442,7 +1449,7 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
 	if(setting_useIMU)
     {
-	    imuIntegration.postOptimization(fh->shell->id);
+	    imuIntegration.postOptimization(frame_hessian->shell->id);
     }
 
     bool imuReady = false;
@@ -1452,7 +1459,7 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
         if(setting_useIMU)
         {
-            imuReady = imuIntegration.finishKeyframeOptimization(fh->shell->id);
+            imuReady = imuIntegration.finishKeyframeOptimization(frame_hessian->shell->id);
         }
 
         coarseTracker_forNewKF->makeK(&Hcalib);
@@ -1495,7 +1502,7 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
 
 	// =========================== add new Immature points & new residuals =========================
-	makeNewTraces(fh, 0);
+	makeNewTraces(frame_hessian, 0);
 
 
 
@@ -1536,7 +1543,7 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
     if(setting_useIMU)
     {
-        imuIntegration.finishKeyframeOperations(fh->shell->id);
+        imuIntegration.finishKeyframeOperations(frame_hessian->shell->id);
     }
 }
 

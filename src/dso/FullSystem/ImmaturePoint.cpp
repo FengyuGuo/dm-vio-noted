@@ -76,6 +76,8 @@ ImmaturePoint::~ImmaturePoint()
  */
 ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hostToFrame_KRKi, const Vec3f &hostToFrame_Kt, const Vec2f& hostToFrame_affine, CalibHessian* HCalib, bool debugPrint)
 {
+
+
 	if(lastTraceStatus == ImmaturePointStatus::IPS_OOB) return lastTraceStatus;
 
 
@@ -97,14 +99,14 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 //	const float minImprovementFactor = 2;		// if pixel-interval is smaller than this, leave it be.
 	// ============== project min and max. return if one of them is OOB ===================
 	Vec3f pr = hostToFrame_KRKi * Vec3f(u,v, 1);
-	Vec3f ptpMin = pr + hostToFrame_Kt*idepth_min;
-	float uMin = ptpMin[0] / ptpMin[2];
+	Vec3f ptpMin = pr + hostToFrame_Kt*idepth_min; // avoid divide 0 problem. nice!
+	float uMin = ptpMin[0] / ptpMin[2]; // pixel coordination w.r.t minimum inverse depth
 	float vMin = ptpMin[1] / ptpMin[2];
 
-    Mat22f Rplane = hostToFrame_KRKi.topLeftCorner<2,2>();
+    Mat22f Rplane = hostToFrame_KRKi.topLeftCorner<2,2>(); // why? consider mainly the effect of z rotation?
     int maxRotPatX = 0;
     int maxRotPatY = 0;
-    Vec2f rotatetPattern[MAX_RES_PER_POINT];
+    Vec2f rotatetPattern[MAX_RES_PER_POINT]; //residual pattern consider the camera rotation
     for(int idx=0;idx<patternNum;idx++)
     {
         rotatetPattern[idx] = Rplane * Vec2f(patternP[idx][0], patternP[idx][1]);
@@ -113,6 +115,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
         maxRotPatX = std::max(absX, maxRotPatX);
         maxRotPatY = std::max(absY, maxRotPatY);
     }
+	// set the boundary
     int realBoundU = maxRotPatX + 2;
     int realBoundV = maxRotPatY + 2;
     int boundU = 4;
@@ -126,21 +129,21 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 				u,v,uMin, vMin,  ptpMin[2], idepth_min, idepth_max);
 		lastTraceUV = Vec2f(-1,-1);
 		lastTracePixelInterval=0;
-		return lastTraceStatus = ImmaturePointStatus::IPS_OOB;
+		return lastTraceStatus = ImmaturePointStatus::IPS_OOB; // points with minimum idepth is out of boundary, then OOB
 	}
 
 	float dist;
 	float uMax;
 	float vMax;
 	Vec3f ptpMax;
-	if(std::isfinite(idepth_max))
+	if(std::isfinite(idepth_max)) // normal condition after init. depth is unknown somehow
 	{
 		ptpMax = pr + hostToFrame_Kt*idepth_max;
 		uMax = ptpMax[0] / ptpMax[2];
 		vMax = ptpMax[1] / ptpMax[2];
 
 
-		if(!(uMax > boundU && vMax > boundV && uMax < wG[0]-boundU-1 && vMax < hG[0]-boundV-1))
+		if(!(uMax > boundU && vMax > boundV && uMax < wG[0]-boundU-1 && vMax < hG[0]-boundV-1)) // points with maximum idepth is out of boundary, then OOB
 		{
 			if(debugPrint) printf("OOB uMax  %f %f - %f %f!\n",u,v, uMax, vMax);
 			lastTraceUV = Vec2f(-1,-1);
@@ -160,15 +163,15 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 			lastTraceUV = Vec2f(uMax+uMin, vMax+vMin)*0.5;
 			lastTracePixelInterval=dist;
-			return lastTraceStatus = ImmaturePointStatus::IPS_SKIPPED;
+			return lastTraceStatus = ImmaturePointStatus::IPS_SKIPPED; // position is good or movement is towards point then skipp
 		}
 		assert(dist>0);
 	}
-	else
+	else // init condition
 	{
 		dist = maxPixSearch;
 
-		// project to arbitrary depth to get direction.
+		// project to arbitrary depth to get direction. only get direction
 		ptpMax = pr + hostToFrame_Kt*0.01;
 		uMax = ptpMax[0] / ptpMax[2];
 		vMax = ptpMax[1] / ptpMax[2];
@@ -195,7 +198,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 
 	// set OOB if scale change too big.
-	if(!(idepth_min<0 || (ptpMin[2]>0.75 && ptpMin[2]<1.5)))
+	if(!(idepth_min<0 || (ptpMin[2]>0.75 && ptpMin[2]<1.5))) // ptpMin can reflect change of scale? how?
 	{
 		if(debugPrint) printf("OOB SCALE %f %f %f!\n", uMax, vMax,  ptpMin[2]);
 		lastTraceUV = Vec2f(-1,-1);
@@ -210,7 +213,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 	float a = (Vec2f(dx,dy).transpose() * gradH * Vec2f(dx,dy));
 	float b = (Vec2f(dy,-dx).transpose() * gradH * Vec2f(dy,-dx));
-	float errorInPixel = 0.2f + 0.2f * (a+b) / a;
+	float errorInPixel = 0.2f + 0.2f * (a+b) / a; // what is going on?
 
 	if(errorInPixel*setting_trace_minImprovementFactor > dist && std::isfinite(idepth_max))
 	{

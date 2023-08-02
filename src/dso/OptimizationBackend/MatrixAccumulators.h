@@ -1084,10 +1084,20 @@ public:
 	  shiftUp(false);
   }
 
-
-
-
-
+  /**
+   * J0: 1.0 / depth * di / dx * fx
+   * J1: 1.0 / depth * di / dy * fy
+   * J2: -1.0 / depth * (u * di / dx * fx + v * di / dy * fy)
+   * J3: -(u * v * di / dx * fx + di / dy * fy * (1.0 + v^2))
+   * J4: -(u * v * di / dy * fy + di / dx * fx * (1.0 + u^2))
+   * J5: u * di / dy * fy - v * di / dx * fx
+   * J6: a * (b0 - i[x, y])
+   * J7: -1
+   * J8: residual
+   * w: huber_weight
+   * 
+   * construct the hessian matrix
+   */
   inline void updateSSE_eighted(
 		  const __m128 J0,const __m128 J1,
 		  const __m128 J2,const __m128 J3,

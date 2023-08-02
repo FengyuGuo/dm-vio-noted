@@ -111,8 +111,27 @@ private:
 
 
 	Vec6 calcResAndGS(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH);
+	/**
+	 * 0. total loss
+	 * 1. valid points that is inside current frame
+	 * 2. mean pixel shift by pure +- translation
+	 * 3. 0
+	 * 4. mean pixel shift by rotation and +- translation
+	 * 5. ratio of points that exceed the residual cutoff threshold
+	 */
 	Vec6 calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH);
+
+	/**
+	 * @brief formulate the JtJ and Jtb matrix. states to be solved include rotation, translation and 2 photometric parameters
+	 * 
+	 * @param lvl 
+	 * @param H_out 
+	 * @param b_out 
+	 * @param refToNew 
+	 * @param aff_g2l 
+	 */
 	void calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l);
+
 	void calcGS(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l);
 
 	// pc buffers

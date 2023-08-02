@@ -307,11 +307,11 @@ dmvio::CoarseIMULogic::computeCoarseUpdate(const dso::Mat88& H_in, const dso::Ve
     // Linearize factor graph.
     gtsam::GaussianFactorGraph::shared_ptr gfg = coarseGraph->linearize(*coarseValues);
     std::map<gtsam::Key, size_t> keyDimMap = gfg->getKeyDimMap();
-
+    // actually we only use gtsam to get jacobian and hessian
     std::pair<gtsam::Matrix, gtsam::Vector> gtsamHAndB = gfg->hessian(coarseOrdering);
 
     int nrowsGT = gtsamHAndB.first.rows();
-    gtsam::Matrix HComplete(nrowsGT + 2, nrowsGT + 2);
+    gtsam::Matrix HComplete(nrowsGT + 2, nrowsGT + 2); //add 2 photometric params
     gtsam::Vector bComplete(nrowsGT + 2);
 
     HComplete.block(2, 2, nrowsGT, nrowsGT) = gtsamHAndB.first; // Fill correct part with the matrix from GTSAM
@@ -327,12 +327,12 @@ dmvio::CoarseIMULogic::computeCoarseUpdate(const dso::Mat88& H_in, const dso::Ve
     bComplete.segment(0, 14) += dsoHAndB.second;
 
     // Use lambda multiplication...
-    for(int i = 0; i < nrowsGT + 2; i++) HComplete(i, i) *= (1 + lambda);
+    for(int i = 0; i < nrowsGT + 2; i++) HComplete(i, i) *= (1 + lambda); // add damping in optimization
 
     // --------------------------------------------------
     // Compute update step
     // --------------------------------------------------
-    gtsam::Vector inc = HComplete.ldlt().solve(-bComplete);
+    gtsam::Vector inc = HComplete.ldlt().solve(-bComplete); // simply eigen cholesky decomposation to do coarse frame tracking
 
     inc *= extrapFac;
 
@@ -403,6 +403,7 @@ void dmvio::CoarseIMULogic::addVisualToCoarseGraph(const dso::Mat88& H, const ds
     bFull = -bFull; // The b in GTSAM resembles -b in DSO!
 
     // Marginalize out a, b as they shall not be included in the factor graph...
+    // photometric params is marginalized...
     gtsam::Matrix Hmm = HFull.block(0, 0, 2, 2);
     gtsam::Matrix Hma = HFull.block(0, 2, 2, 12);
     gtsam::Matrix Haa = HFull.block(2, 2, 12, 12);

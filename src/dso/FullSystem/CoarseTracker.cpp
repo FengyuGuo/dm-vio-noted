@@ -310,37 +310,51 @@ void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &ref
 	__m128 zero = _mm_set1_ps(0);
 
 	int n = buf_warped_n;
-	assert(n%4==0);
-	for(int i=0;i<n;i+=4)
+	assert(n%4==0); //valid points number should be 
+	for(int i=0;i<n;i+=4) //4 points eacha time to accelerate
 	{
-		__m128 dx = _mm_mul_ps(_mm_load_ps(buf_warped_dx+i), fxl);
-		__m128 dy = _mm_mul_ps(_mm_load_ps(buf_warped_dy+i), fyl);
+		__m128 dx = _mm_mul_ps(_mm_load_ps(buf_warped_dx+i), fxl); // image x gradient * fx. gradient in normalized plane
+		__m128 dy = _mm_mul_ps(_mm_load_ps(buf_warped_dy+i), fyl); // image y gradient * fy. gradient in normalized plane
 		__m128 u = _mm_load_ps(buf_warped_u+i);
 		__m128 v = _mm_load_ps(buf_warped_v+i);
 		__m128 id = _mm_load_ps(buf_warped_idepth+i);
 
-
+		/**
+		 * 1.0 / depth * di / dx * fx
+		 * 1.0 / depth * di / dy * fy
+		 * -1.0 / depth * (u * di / dx * fx + v * di / dy * fy)
+		 * -(u * v * di / dx * fx + di / dy * fy * (1.0 + v^2))
+		 * -(u * v * di / dy * fy + di / dx * fx * (1.0 + u^2))
+		 * u * di / dy * fy - v * di / dx * fx
+		 * a * (b0 - i[x, y])
+		 * -1
+		 * residual
+		 * huber_weight
+		 */
 		acc.updateSSE_eighted(
-				_mm_mul_ps(id,dx),
-				_mm_mul_ps(id,dy),
-				_mm_sub_ps(zero, _mm_mul_ps(id,_mm_add_ps(_mm_mul_ps(u,dx), _mm_mul_ps(v,dy)))),
+				_mm_mul_ps(id,dx), // 1.0 / depth * di / dx * fx
+				_mm_mul_ps(id,dy), // 1.0 / depth * di / dy * fy
+				_mm_sub_ps(zero, _mm_mul_ps(id,_mm_add_ps(_mm_mul_ps(u,dx), _mm_mul_ps(v,dy)))), // -1.0 / depth * (u * di / dx * fx + v * di / dy * fy)
 				_mm_sub_ps(zero, _mm_add_ps(
 						_mm_mul_ps(_mm_mul_ps(u,v),dx),
-						_mm_mul_ps(dy,_mm_add_ps(one, _mm_mul_ps(v,v))))),
+						_mm_mul_ps(dy,_mm_add_ps(one, _mm_mul_ps(v,v))))), // -(u * v * di / dx * fx + di / dy * fy * (1.0 + v^2))
 				_mm_add_ps(
 						_mm_mul_ps(_mm_mul_ps(u,v),dy),
-						_mm_mul_ps(dx,_mm_add_ps(one, _mm_mul_ps(u,u)))),
-				_mm_sub_ps(_mm_mul_ps(u,dy), _mm_mul_ps(v,dx)),
-				_mm_mul_ps(a,_mm_sub_ps(b0, _mm_load_ps(buf_warped_refColor+i))),
-				minusOne,
-				_mm_load_ps(buf_warped_residual+i),
-				_mm_load_ps(buf_warped_weight+i));
+						_mm_mul_ps(dx,_mm_add_ps(one, _mm_mul_ps(u,u)))), // -(u * v * di / dy * fy + di / dx * fx * (1.0 + u^2))
+				_mm_sub_ps(_mm_mul_ps(u,dy), _mm_mul_ps(v,dx)), // u * di / dy * fy - v * di / dx * fx
+				_mm_mul_ps(a,_mm_sub_ps(b0, _mm_load_ps(buf_warped_refColor+i))), // a * (b0 - i[x, y])
+				minusOne, // -1
+				_mm_load_ps(buf_warped_residual+i), // residual
+				_mm_load_ps(buf_warped_weight+i)); // huber_weight
 	}
 
 	acc.finish();
 	H_out = acc.H.topLeftCorner<8,8>().cast<double>() * (1.0f/n);
 	b_out = acc.H.topRightCorner<8,1>().cast<double>() * (1.0f/n);
 
+	// taking relative weight into consideration
+	// 8 elements:
+	// 3 rotation, 3 translation, a and b
 	H_out.block<8,3>(0,0) *= SCALE_XI_ROT;
 	H_out.block<8,3>(0,3) *= SCALE_XI_TRANS;
 	H_out.block<8,1>(0,6) *= SCALE_A;
@@ -362,8 +376,8 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 {
 	float E = 0;
 	int numTermsInE = 0; // number of points use to compute energy
-	int numTermsInWarped = 0;
-	int numSaturated=0; // number of points that have larger residual than cutof threhold
+	int numTermsInWarped = 0; // number of points that have less residual  that cutoff threshold
+	int numSaturated=0; // number of points that have larger residual than cutoff threhold
 
 	int wl = w[lvl];
 	int hl = h[lvl];
@@ -509,6 +523,14 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 	}
 
 	Vec6 rs;
+	/**
+	 * 0. total loss
+	 * 1. valid points that is inside current frame
+	 * 2. mean pixel shift by pure +- translation
+	 * 3. 0
+	 * 4. mean pixel shift by rotation and +- translation
+	 * 5. ratio of points that exceed the residual cutoff threshold
+	 */
 	rs[0] = E;
 	rs[1] = numTermsInE;
 	rs[2] = sumSquaredShiftT/(sumSquaredShiftNum+0.1);
@@ -567,13 +589,13 @@ bool CoarseTracker::trackNewestCoarse(
 
     Mat88 H; Vec8 b;
     int lastLvl = -1;
-	for(int lvl=coarsestLvl; lvl>=0; lvl--) // do tracking on different level of pyr
+	for(int lvl=coarsestLvl; lvl>=0; lvl--) // do tracking on different level of pyr. from coarse to fine to original image
 	{
 		float levelCutoffRepeat=1;
 		Vec6 resOld = calcRes(lvl, refToNew_current, aff_g2l_current, setting_coarseCutoffTH*levelCutoffRepeat);
-		while(resOld[5] > 0.6 && (levelCutoffRepeat < 50 || resOld[5] > 0.99) )
+		while(resOld[5] > 0.6 && (levelCutoffRepeat < 50 || resOld[5] > 0.99) ) // make softer cutoff photometric threshold until we got valid point ratio larger than 0.6
 		{
-			levelCutoffRepeat*=2;
+			levelCutoffRepeat*=2; 
 			resOld = calcRes(lvl, refToNew_current, aff_g2l_current, setting_coarseCutoffTH*levelCutoffRepeat);
 
             if(!setting_debugout_runquiet)
@@ -602,7 +624,7 @@ bool CoarseTracker::trackNewestCoarse(
 		{
 		    dmvio::TimeMeasurement timeMeasurement("coarseTrackingIteration");
 			Mat88 Hl = H;
-			for(int i=0;i<8;i++) Hl(i,i) *= (1+lambda);
+			for(int i=0;i<8;i++) Hl(i,i) *= (1+lambda); //damped GN method?
 
 
             float extrapFac = 1;
@@ -686,6 +708,7 @@ bool CoarseTracker::trackNewestCoarse(
             }
 			Vec6 resNew = calcRes(lvl, refToNew_new, aff_g2l_new, setting_coarseCutoffTH*levelCutoffRepeat);
 
+			// accept or not depend on mean photometric residual
 			bool accept = (resNew[0] / resNew[1]) < (resOld[0] / resOld[1]);
 
 			if(debugPrint)
@@ -709,7 +732,7 @@ bool CoarseTracker::trackNewestCoarse(
 				refToNew_current = refToNew_new;
                 if(dso::setting_useIMU)
                     imuIntegration.acceptCoarseUpdate();
-				lambda *= 0.5;
+				lambda *= 0.5; // lower the damping coeffiency inside damping GN method
 			}
 			else
 			{
@@ -723,7 +746,7 @@ bool CoarseTracker::trackNewestCoarse(
 			{
 				if(debugPrint)
 					printf("inc too small, break!\n");
-				break;
+				break; // update norm is small then we think problem is converged
 			}
 		}
 
@@ -762,7 +785,7 @@ bool CoarseTracker::trackNewestCoarse(
     if(setting_affineOptModeA < 0) aff_g2l_out.a=0;
 	if(setting_affineOptModeB < 0) aff_g2l_out.b=0;
 
-    if(lastLvl == 0)
+    if(lastLvl == 0) // we have reach the raw image level.
     {
         if(dso::setting_useIMU)
             imuIntegration.addVisualToCoarseGraph(H, b, trackingGood);

@@ -329,6 +329,10 @@ private:
 	void makeKeyFrame( FrameHessian* fh);
 	void makeNonKeyFrame( FrameHessian* fh);
 	void deliverTrackedFrame(FrameHessian* fh, bool needKF);
+	/**
+	 * backend optimization runs in another thread.
+	 * coarse tracking(front end) runs in make loop
+	 */
 	void mappingLoop();
 
 	// tracking / mapping synchronization. All protected by [trackMapSyncMutex].
