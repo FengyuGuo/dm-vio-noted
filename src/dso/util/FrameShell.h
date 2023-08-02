@@ -33,7 +33,10 @@
 namespace dso
 {
 
-
+/**
+ * @brief class to hold key frame
+ * 
+ */
 class FrameShell
 {
 public:
@@ -48,7 +51,7 @@ public:
 
 	// constantly adapted.
 	SE3 camToWorld;				// Write: TRACKING, while frame is still fresh; MAPPING: only when locked [shellPoseMutex].
-	AffLight aff_g2l;
+	AffLight aff_g2l;	// ??
 	bool poseValid;
 	bool trackingWasGood;
 

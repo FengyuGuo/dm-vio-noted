@@ -50,6 +50,18 @@ public:
 	CoarseTracker(int w, int h, dmvio::IMUIntegration &imuIntegration);
 	~CoarseTracker();
 
+	/**
+	 * @brief core fuction to track new frame
+	 * 
+	 * @param newFrameHessian 
+	 * @param lastToNew_out 
+	 * @param aff_g2l_out 
+	 * @param coarsestLvl 
+	 * @param minResForAbort 
+	 * @param wrap 
+	 * @return true 
+	 * @return false 
+	 */
 	bool trackNewestCoarse(
 			FrameHessian* newFrameHessian,
 			SE3 &lastToNew_out, AffLight &aff_g2l_out,

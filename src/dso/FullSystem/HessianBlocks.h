@@ -108,7 +108,10 @@ struct FrameFramePrecalc
 
 
 
-
+/**
+ * @brief struct to keep jacobian and hessian?
+ * 
+ */
 
 struct FrameHessian
 {
@@ -119,9 +122,9 @@ struct FrameHessian
 	//DepthImageWrap* frame;
 	FrameShell* shell;
 
-	Eigen::Vector3f* dI;				 // trace, fine tracking. Used for direction select (not for gradient histograms etc.)
-	Eigen::Vector3f* dIp[PYR_LEVELS];	 // coarse tracking / coarse initializer. NAN in [0] only.
-	float* absSquaredGrad[PYR_LEVELS];  // only used for pixel select (histograms etc.). no NAN.
+	Eigen::Vector3f* dI;				 // ?? trace, fine tracking. Used for direction select (not for gradient histograms etc.)
+	Eigen::Vector3f* dIp[PYR_LEVELS];	 // ?? coarse tracking / coarse initializer. NAN in [0] only.
+	float* absSquaredGrad[PYR_LEVELS];  // image gradient. only used for pixel select (histograms etc.). no NAN.
 
     bool addCamPrior;
 

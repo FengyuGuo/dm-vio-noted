@@ -141,7 +141,14 @@ public:
                dmvio::IMUSettings& imuSettings);
 	virtual ~FullSystem();
 
-	// adds a new frame, and creates point & residual structs.
+	/**
+	 * @brief adds a new frame, and creates point & residual structs.
+	 * 
+	 * @param image 
+	 * @param id 
+	 * @param imuData vector of imu measurement between last image and this image
+	 * @param gtData
+	 */
     void addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData* imuData, dmvio::GTData* gtData);
 
 	// marginalizes a frame. drops / marginalizes points & residuals.
@@ -179,6 +186,7 @@ public:
 	Sophus::SE3 firstPose; // contains transform from first to world.
 
 private:
+	// calibrated photometric parameters
 	CalibHessian Hcalib;
 
     dmvio::GravityInitializer gravityInit;

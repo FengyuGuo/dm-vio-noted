@@ -361,13 +361,13 @@ void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &ref
 Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH)
 {
 	float E = 0;
-	int numTermsInE = 0;
+	int numTermsInE = 0; // number of points use to compute energy
 	int numTermsInWarped = 0;
-	int numSaturated=0;
+	int numSaturated=0; // number of points that have larger residual than cutof threhold
 
 	int wl = w[lvl];
 	int hl = h[lvl];
-	Eigen::Vector3f* dINewl = newFrame->dIp[lvl];
+	Eigen::Vector3f* dINewl = newFrame->dIp[lvl]; // color and image gradient of new frame
 	float fxl = fx[lvl];
 	float fyl = fy[lvl];
 	float cxl = cx[lvl];
@@ -393,6 +393,7 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 		resImage->setConst(Vec3b(255,255,255));
 	}
 
+	//buffer for tracking? include point number, point coordinates, inverse depth and color.
 	int nl = pc_n[lvl];
 	float* lpc_u = pc_u[lvl];
 	float* lpc_v = pc_v[lvl];
@@ -402,18 +403,18 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 
 	for(int i=0;i<nl;i++)
 	{
-		float id = lpc_idepth[i];
+		float id = lpc_idepth[i]; // inverse depth
 		float x = lpc_u[i];
 		float y = lpc_v[i];
 
 		Vec3f pt = RKi * Vec3f(x, y, 1) + t*id;
 		float u = pt[0] / pt[2];
 		float v = pt[1] / pt[2];
-		float Ku = fxl * u + cxl;
+		float Ku = fxl * u + cxl; // coord in new image
 		float Kv = fyl * v + cyl;
-		float new_idepth = id/pt[2];
+		float new_idepth = id/pt[2]; // inverse in new image frame
 
-		if(lvl==0 && i%32==0)
+		if(lvl==0 && i%32==0) // every 32 points. sum the pixel shift.
 		{
 			// translation only (positive)
 			Vec3f ptT = Ki[lvl] * Vec3f(x, y, 1) + t*id;
@@ -446,29 +447,31 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 			sumSquaredShiftNum+=2;
 		}
 
-		if(!(Ku > 2 && Kv > 2 && Ku < wl-3 && Kv < hl-3 && new_idepth > 0)) continue;
+		if(!(Ku > 2 && Kv > 2 && Ku < wl-3 && Kv < hl-3 && new_idepth > 0)) continue; //away from border. check the residual patch shape in the paper
 
 
 
-		float refColor = lpc_color[i];
-        Vec3f hitColor = getInterpolatedElement33(dINewl, Ku, Kv, wl);
+		float refColor = lpc_color[i]; // color from ref frame
+        Vec3f hitColor = getInterpolatedElement33(dINewl, Ku, Kv, wl); // get the interpolated color and image gradients
         if(!std::isfinite((float)hitColor[0])) continue;
+		// photometric residual. we can see how the photometric calibration make effect
         float residual = hitColor[0] - (float)(affLL[0] * refColor + affLL[1]);
-        float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+		// robust reisual staff
+        float huber_weight = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
 
 
 		if(fabs(residual) > cutoffTH)
 		{
-			if(debugPlot) resImage->setPixel4(lpc_u[i], lpc_v[i], Vec3b(0,0,255));
+			if(debugPlot) resImage->setPixel4(lpc_u[i], lpc_v[i], Vec3b(0,0,255)); // set to red in debugging image
 			E += maxEnergy;
 			numTermsInE++;
 			numSaturated++;
 		}
 		else
 		{
-			if(debugPlot) resImage->setPixel4(lpc_u[i], lpc_v[i], Vec3b(residual+128,residual+128,residual+128));
+			if(debugPlot) resImage->setPixel4(lpc_u[i], lpc_v[i], Vec3b(residual+128,residual+128,residual+128)); // set to gray corespond to resudal quantity
 
-			E += hw *residual*residual*(2-hw);
+			E += huber_weight *residual*residual*(2-huber_weight); // robust residual use huber loss
 			numTermsInE++;
 
 			buf_warped_idepth[numTermsInWarped] = new_idepth;
@@ -477,7 +480,7 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 			buf_warped_dx[numTermsInWarped] = hitColor[1];
 			buf_warped_dy[numTermsInWarped] = hitColor[2];
 			buf_warped_residual[numTermsInWarped] = residual;
-			buf_warped_weight[numTermsInWarped] = hw;
+			buf_warped_weight[numTermsInWarped] = huber_weight;
 			buf_warped_refColor[numTermsInWarped] = lpc_color[i];
 			numTermsInWarped++;
 		}
@@ -564,7 +567,7 @@ bool CoarseTracker::trackNewestCoarse(
 
     Mat88 H; Vec8 b;
     int lastLvl = -1;
-	for(int lvl=coarsestLvl; lvl>=0; lvl--)
+	for(int lvl=coarsestLvl; lvl>=0; lvl--) // do tracking on different level of pyr
 	{
 		float levelCutoffRepeat=1;
 		Vec6 resOld = calcRes(lvl, refToNew_current, aff_g2l_current, setting_coarseCutoffTH*levelCutoffRepeat);
@@ -681,7 +684,6 @@ bool CoarseTracker::trackNewestCoarse(
 
                 incNorm = inc.norm();
             }
-
 			Vec6 resNew = calcRes(lvl, refToNew_new, aff_g2l_new, setting_coarseCutoffTH*levelCutoffRepeat);
 
 			bool accept = (resNew[0] / resNew[1]) < (resOld[0] / resOld[1]);

@@ -188,7 +188,7 @@ void run(ImageFolderReader* reader, IOWrap::PangolinDSOViewer* viewer)
 
     bool imuDataSkipped = false;
     dmvio::IMUData skippedIMUData;
-    for(int ii = 0; ii < (int) idsToPlay.size(); ii++)
+    for(int ii = 0; ii < (int) idsToPlay.size(); ii++) // main loop to load image and imu measurement
     {
         if(!fullSystem->initialized)    // if not initialized: reset start time.
         {
@@ -204,7 +204,7 @@ void run(ImageFolderReader* reader, IOWrap::PangolinDSOViewer* viewer)
         if(mainSettings.preload)
             img = preloadedImages[ii];
         else
-            img = reader->getImage(i);
+            img = reader->getImage(i); // get next image
 
 
         bool skipFrame = false;
@@ -228,13 +228,13 @@ void run(ImageFolderReader* reader, IOWrap::PangolinDSOViewer* viewer)
         bool found = false;
         if(gtDataThere)
         {
-            data = reader->getGTData(i, found);
+            data = reader->getGTData(i, found); // get ground truth data to evaluate accuracy
         }
 
         std::unique_ptr<dmvio::IMUData> imuData;
         if(setting_useIMU)
         {
-            imuData = std::make_unique<dmvio::IMUData>(reader->getIMUData(i));
+            imuData = std::make_unique<dmvio::IMUData>(reader->getIMUData(i)); // get imu measurement between 2 image frame
         }
         if(!skipFrame)
         {
@@ -244,7 +244,7 @@ void run(ImageFolderReader* reader, IOWrap::PangolinDSOViewer* viewer)
                 skippedIMUData.clear();
                 imuDataSkipped = false;
             }
-            fullSystem->addActiveFrame(img, i, imuData.get(), (gtDataThere && found) ? &data : 0);
+            fullSystem->addActiveFrame(img, i, imuData.get(), (gtDataThere && found) ? &data : 0); // main entrance to feed data into DM-VIO system
             if(gtDataThere && found && !disableAllDisplay)
             {
                 viewer->addGTCamPose(data.pose);

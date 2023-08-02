@@ -73,7 +73,8 @@ void IMUCalibration::loadFromFile(std::string settingsFilename)
 
     std::cout << "Loading IMU parameter file at: " << settingsFilename << std::endl;
     YAML::Node config = YAML::LoadFile(settingsFilename)["cam0"];
-    std::vector<std::vector<double> > theVector = config["T_cam_imu"].as<std::vector<std::vector<double> > >();
+    std::cout << "Load cam0" << std::endl;
+    std::vector<std::vector<double> > theVector = config["T_imu_cam"].as<std::vector<std::vector<double> > >();
     Eigen::Matrix4d matrix;
     for(int x = 0; x < 4; ++x)
     {
@@ -82,8 +83,10 @@ void IMUCalibration::loadFromFile(std::string settingsFilename)
             matrix(x, y) = theVector[x][y];
         }
     }
-    std::cout << "Used T_cam_imu: " << std::endl << matrix << std::endl;
-    T_cam_imu = Sophus::SE3d(matrix);
+    std::cout << "Used T_imu_cam: " << std::endl << matrix << std::endl;
+    Eigen::Matrix4d mat_inv = matrix.inverse();
+    mat_inv.block<1,3>(3,0).setZero();
+    T_cam_imu = Sophus::SE3d(mat_inv);
 
     if(config["accelerometer_random_walk"] || config["gyroscope_random_walk"] || config["accelerometer_noise_density"]  ||
     config["gyroscope_noise_density"])

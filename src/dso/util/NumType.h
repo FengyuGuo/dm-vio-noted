@@ -161,7 +161,7 @@ typedef Eigen::Matrix<double,14,1> Vec14;
 
 
 
-
+// coresponcing formular?
 // transforms points from one frame to another.
 struct AffLight
 {

@@ -140,14 +140,14 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 	int w=wG[0];
 	int h=hG[0];
 	for(int i=0;i<w*h;i++)
-		dI[i][0] = color[i];
+		dI[i][0] = color[i]; // 0 channel is image gray scale
 
 	for(int lvl=0; lvl<pyrLevelsUsed; lvl++)
 	{
-		int wl = wG[lvl], hl = hG[lvl];
+		int wl = wG[lvl], hl = hG[lvl]; //width and height in this pyr level
 		Eigen::Vector3f* dI_l = dIp[lvl];
 
-		float* dabs_l = absSquaredGrad[lvl];
+		float* dabs_l = absSquaredGrad[lvl]; // square of image gradient
 		if(lvl>0)
 		{
 			int lvlm1 = lvl-1;
@@ -155,7 +155,7 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 			Eigen::Vector3f* dI_lm = dIp[lvlm1];
 
 
-
+			// create image pyr in each level by taking means of 4 neighbor pixels
 			for(int y=0;y<hl;y++)
 				for(int x=0;x<wl;x++)
 				{
@@ -175,8 +175,8 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 			if(!std::isfinite(dx)) dx=0;
 			if(!std::isfinite(dy)) dy=0;
 
-			dI_l[idx][1] = dx;
-			dI_l[idx][2] = dy;
+			dI_l[idx][1] = dx; // 1 channel is image dx
+			dI_l[idx][2] = dy; // 2 channel is image dy
 
 
 			dabs_l[idx] = dx*dx+dy*dy;
@@ -184,6 +184,7 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 			if(setting_gammaWeightsPixelSelect==1 && HCalib!=0)
 			{
 				float gw = HCalib->getBGradOnly((float)(dI_l[idx][0]));
+				//image gradient also consider the influence of image photometric intrinsic
 				dabs_l[idx] *= gw*gw;	// convert to gradient of original color space (before removing response).
 			}
 		}

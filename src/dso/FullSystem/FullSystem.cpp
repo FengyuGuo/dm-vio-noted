@@ -297,25 +297,25 @@ void FullSystem::printResult(std::string file, bool onlyLogKFPoses, bool saveMet
 	myfile.close();
 }
 
-std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* fh, Sophus::SE3 *referenceToFrameHint)
+std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* frame_hessian, Sophus::SE3 *referenceToFrameHint)
 {
     dmvio::TimeMeasurement timeMeasurement(referenceToFrameHint ? "FullSystem::trackNewCoarse" : "FullSystem::trackNewCoarseNoIMU");
 	assert(allFrameHistory.size() > 0);
 	// set pose initialization.
 
     for(IOWrap::Output3DWrapper* ow : outputWrapper)
-        ow->pushLiveFrame(fh);
+        ow->pushLiveFrame(frame_hessian);
 
 
 
-	FrameHessian* lastF = coarseTracker->lastRef;
+	FrameHessian* lastF = coarseTracker->lastRef; // last key frame
 
 	AffLight aff_last_2_l = AffLight(0,0);
 
     // Seems to contain poses reference_to_newframe.
     std::vector<SE3,Eigen::aligned_allocator<SE3>> lastF_2_fh_tries;
 
-    if(referenceToFrameHint)
+    if(referenceToFrameHint) // if we have new frame pose guess from IMU or some other sources
     {
         // We got a hint (typically from IMU) where our pose is, so we don't need the random initializations below.
         lastF_2_fh_tries.push_back(*referenceToFrameHint);
@@ -328,7 +328,7 @@ std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* fh, Sophus::SE3 *
                 FrameShell* slast = allFrameHistory[i];
                 if(slast->trackingWasGood)
                 {
-                    aff_last_2_l = slast->aff_g2l;
+                    aff_last_2_l = slast->aff_g2l; // init the photometri parameters??
                     break;
                 }
                 if(slast->trackingRef != lastF->shell)
@@ -428,7 +428,7 @@ std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* fh, Sophus::SE3 *
 		AffLight aff_g2l_this = aff_last_2_l;
 		SE3 lastF_2_fh_this = lastF_2_fh_tries[i];
 		bool trackingIsGood = coarseTracker->trackNewestCoarse(
-				fh, lastF_2_fh_this, aff_g2l_this,
+				frame_hessian, lastF_2_fh_this, aff_g2l_this,
 				pyrLevelsUsed-1,
 				achievedRes);	// in each level has to be at least as good as the last try.
 		tryIterations++;
@@ -506,28 +506,28 @@ std::pair<Vec4, bool> FullSystem::trackNewCoarse(FrameHessian* fh, Sophus::SE3 *
 	lastCoarseRMSE = achievedRes;
 
 	// no lock required, as fh is not used anywhere yet.
-	fh->shell->camToTrackingRef = lastF_2_fh.inverse();
-	fh->shell->trackingRef = lastF->shell;
-	fh->shell->aff_g2l = aff_g2l;
-	fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
-	fh->shell->trackingWasGood = trackingGoodRet;
+	frame_hessian->shell->camToTrackingRef = lastF_2_fh.inverse();
+	frame_hessian->shell->trackingRef = lastF->shell;
+	frame_hessian->shell->aff_g2l = aff_g2l;
+	frame_hessian->shell->camToWorld = frame_hessian->shell->trackingRef->camToWorld * frame_hessian->shell->camToTrackingRef;
+	frame_hessian->shell->trackingWasGood = trackingGoodRet;
 
 
 	if(coarseTracker->firstCoarseRMSE < 0)
 		coarseTracker->firstCoarseRMSE = achievedRes[0];
 
     if(!setting_debugout_runquiet)
-        printf("Coarse Tracker tracked ab = %f %f (exp %f). Res %f!\n", aff_g2l.a, aff_g2l.b, fh->ab_exposure, achievedRes[0]);
+        printf("Coarse Tracker tracked ab = %f %f (exp %f). Res %f!\n", aff_g2l.a, aff_g2l.b, frame_hessian->ab_exposure, achievedRes[0]);
 
 
 
 	if(setting_logStuff)
 	{
 		(*coarseTrackingLog) << std::setprecision(16)
-						<< fh->shell->id << " "
-						<< fh->shell->timestamp << " "
-						<< fh->ab_exposure << " "
-						<< fh->shell->camToWorld.log().transpose() << " "
+						<< frame_hessian->shell->id << " "
+						<< frame_hessian->shell->timestamp << " "
+						<< frame_hessian->ab_exposure << " "
+						<< frame_hessian->shell->camToWorld.log().transpose() << " "
 						<< aff_g2l.a << " "
 						<< aff_g2l.b << " "
 						<< achievedRes[0] << " "
@@ -893,31 +893,32 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
 
 	dmvio::TimeMeasurement measureInit("initObjectsAndMakeImage");
 	// =========================== add into allFrameHistory =========================
-	FrameHessian* fh = new FrameHessian();
+	FrameHessian* frame_hessian = new FrameHessian();
 	FrameShell* shell = new FrameShell();
-	shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
+	shell->camToWorld = SE3(); 		// no lock required, as frame_hessian is not used anywhere yet.
 	shell->aff_g2l = AffLight(0,0);
-    shell->marginalizedAt = shell->id = allFrameHistory.size();
+    shell->marginalizedAt = allFrameHistory.size();
+	shell->id = allFrameHistory.size();
     shell->timestamp = image->timestamp;
     shell->incoming_id = id;
-	fh->shell = shell;
+	frame_hessian->shell = shell;
 	allFrameHistory.push_back(shell);
 
 
     // =========================== make Images / derivatives etc. =========================
-	fh->ab_exposure = image->exposure_time;
-	fh->makeImages(image->image, &Hcalib);
+	frame_hessian->ab_exposure = image->exposure_time;
+	frame_hessian->makeImages(image->image, &Hcalib);
 
     measureInit.end();
 
 	if(!initialized)
 	{
 		// use initializer!
-		if(coarseInitializer->frameID<0)	// first frame set. fh is kept by coarseInitializer.
+		if(coarseInitializer->frameID<0)	// first frame set. frame_hessian is kept by coarseInitializer.
 		{
             // Only in this case no IMU-data is accumulated for the BA as this is the first frame.
 		    dmvio::TimeMeasurement initMeasure("InitializerFirstFrame");
-			coarseInitializer->setFirst(&Hcalib, fh);
+			coarseInitializer->setFirst(&Hcalib, frame_hessian);
             if(setting_useIMU)
             {
                 gravityInit.addMeasure(*imuData, Sophus::SE3d());
@@ -927,7 +928,7 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
         }else
         {
             dmvio::TimeMeasurement initMeasure("InitializerOtherFrames");
-			bool initDone = coarseInitializer->trackFrame(fh, outputWrapper);
+			bool initDone = coarseInitializer->trackFrame(frame_hessian, outputWrapper);
 			if(setting_useIMU)
 			{
                 imuIntegration.addIMUDataToBA(*imuData);
@@ -939,22 +940,22 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
 			}
             if (initDone)    // if SNAPPED
             {
-                initializeFromInitializer(fh);
+                initializeFromInitializer(frame_hessian);
                 if(setting_useIMU && linearizeOperation)
                 {
-                    imuIntegration.setGTData(gtData, fh->shell->id);
+                    imuIntegration.setGTData(gtData, frame_hessian->shell->id);
                 }
                 lock.unlock();
                 initMeasure.end();
                 for(IOWrap::Output3DWrapper* ow : outputWrapper)
                     ow->publishSystemStatus(dmvio::VISUAL_ONLY);
-                deliverTrackedFrame(fh, true);
+                deliverTrackedFrame(frame_hessian, true);
             } else
             {
                 // if still initializing
 
                 // Maybe change first frame.
-                double timeBetweenFrames = fh->shell->timestamp - coarseInitializer->firstFrame->shell->timestamp;
+                double timeBetweenFrames = frame_hessian->shell->timestamp - coarseInitializer->firstFrame->shell->timestamp;
                 std::cout << "InitTimeBetweenFrames: " << timeBetweenFrames << std::endl;
                 if(timeBetweenFrames > imuIntegration.getImuSettings().maxTimeBetweenInitFrames)
                 {
@@ -962,8 +963,8 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
                     setting_fullResetRequested = true;
                 }else
                 {
-                    fh->shell->poseValid = false;
-                    delete fh;
+                    frame_hessian->shell->poseValid = false;
+                    delete frame_hessian;
                 }
             }
         }
@@ -1005,8 +1006,8 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
         SE3 referenceToFrame;
         if(dso::setting_useIMU)
         {
-			SE3 referenceToFrame = imuIntegration.addIMUData(*imuData, fh->shell->id,
-                                                                fh->shell->timestamp, trackingRefChanged, lastFrameId);
+			SE3 referenceToFrame = imuIntegration.addIMUData(*imuData, frame_hessian->shell->id,
+                                                                frame_hessian->shell->timestamp, trackingRefChanged, lastFrameId);
             // If initialized we use the prediction from IMU data as initialization for the coarse tracking.
             referenceToFramePassed = &referenceToFrame;
 			if(!imuIntegration.isCoarseInitialized())
@@ -1016,7 +1017,7 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
             imuIntegration.addIMUDataToBA(*imuData);
         }
 
-        std::pair<Vec4, bool> pair = trackNewCoarse(fh, referenceToFramePassed);
+        std::pair<Vec4, bool> pair = trackNewCoarse(frame_hessian, referenceToFramePassed);
         dso::Vec4 tres = std::move(pair.first);
         bool forceNoKF = !pair.second; // If coarse tracking was bad don't make KF.
         bool forceKF = false;
@@ -1035,17 +1036,17 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
             }
         }
 
-        double timeSinceLastKeyframe = fh->shell->timestamp - allKeyFramesHistory.back()->timestamp;
+        double timeSinceLastKeyframe = frame_hessian->shell->timestamp - allKeyFramesHistory.back()->timestamp;
 		bool needToMakeKF = false;
 		if(setting_keyframesPerSecond > 0)
 		{
 			needToMakeKF = allFrameHistory.size()== 1 ||
-					(fh->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
+					(frame_hessian->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
 		}
 		else
 		{
-			Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
-					coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
+			Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, frame_hessian->ab_exposure,
+					coarseTracker->lastRef_aff_g2l, frame_hessian->shell->aff_g2l);
 
 			// BRIGHTNESS CHECK
 			needToMakeKF = allFrameHistory.size()== 1 ||
@@ -1063,7 +1064,7 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
             }
 
 		}
-		double transNorm = fh->shell->camToTrackingRef.translation().norm() * imuIntegration.getCoarseScale();
+		double transNorm = frame_hessian->shell->camToTrackingRef.translation().norm() * imuIntegration.getCoarseScale();
 		if(imuIntegration.isCoarseInitialized() && transNorm < setting_forceNoKFTranslationThresh)
         {
 		    forceNoKF = true;
@@ -1076,9 +1077,9 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
 
         if(needToMakeKF)
         {
-            int prevKFId = fh->shell->trackingRef->id;
+            int prevKFId = frame_hessian->shell->trackingRef->id;
             // In non-RT mode this will always be accurate, but in RT mode the printout in makeKeyframe is correct (because some of these KFs do not end up getting created).
-            int framesBetweenKFs = fh->shell->id - prevKFId - 1;
+            int framesBetweenKFs = frame_hessian->shell->id - prevKFId - 1;
 
             // Enforce setting_minFramesBetweenKeyframes.
             if(framesBetweenKFs < (int) setting_minFramesBetweenKeyframes) // if integer value is smaller we just skip.
@@ -1101,23 +1102,23 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id, dmvio::IMUData*
 
         if(setting_useIMU)
         {
-            imuIntegration.finishCoarseTracking(*(fh->shell), needToMakeKF);
+            imuIntegration.finishCoarseTracking(*(frame_hessian->shell), needToMakeKF);
         }
 
         if(needToMakeKF && setting_useIMU && linearizeOperation)
         {
-            imuIntegration.setGTData(gtData, fh->shell->id);
+            imuIntegration.setGTData(gtData, frame_hessian->shell->id);
         }
 
         dmvio::TimeMeasurement timeLastStuff("afterCoarseTracking");
 
         for(IOWrap::Output3DWrapper* ow : outputWrapper)
-            ow->publishCamPose(fh->shell, &Hcalib);
+            ow->publishCamPose(frame_hessian->shell, &Hcalib);
 
         lock.unlock();
         timeLastStuff.end();
         coarseTrackingTime.end();
-		deliverTrackedFrame(fh, needToMakeKF);
+		deliverTrackedFrame(frame_hessian, needToMakeKF);
 		return;
 	}
 }
