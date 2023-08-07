@@ -63,7 +63,11 @@ public:
 
 
 
-
+	/**
+	 * [ (dI / dx)^2 			dI / dx * dI / dy	]
+	 * [											]
+	 * [ dI / dx * dI / dy		(dI / dy)^2			]
+	 */
 	Mat22f gradH;
 	Vec2f gradH_ev;
 	Mat22f gradH_eig;

@@ -61,7 +61,7 @@ namespace dso
 void FullSystem::flagFramesForMarginalization(FrameHessian* newFH)
 {
     dmvio::TimeMeasurement timeMeasurement("flagFramesForMarginalization");
-	if(setting_minFrameAge > setting_maxFrames)
+	if(setting_minFrameAge > setting_maxFrames) // if slide window have more frame than settings, then marginalize old frames
 	{
 		for(int i=setting_maxFrames;i<(int)frameHessians.size();i++)
 		{
@@ -77,21 +77,21 @@ void FullSystem::flagFramesForMarginalization(FrameHessian* newFH)
 	for(int i=0;i<(int)frameHessians.size();i++)
 	{
 		FrameHessian* fh = frameHessians[i];
-		int in = fh->pointHessians.size() + fh->immaturePoints.size();
-		int out = fh->pointHessiansMarginalized.size() + fh->pointHessiansOut.size();
+		int in = fh->pointHessians.size() + fh->immaturePoints.size(); // active points and potential active points
+		int out = fh->pointHessiansMarginalized.size() + fh->pointHessiansOutlier.size(); // outlier and marginalized points
 
 
 		Vec2 refToFh=AffLight::fromToVecExposure(frameHessians.back()->ab_exposure, fh->ab_exposure,
 				frameHessians.back()->aff_g2l(), fh->aff_g2l());
 
-
+		//			0.05 too much points are removed										0.7 photometric different are too large
 		if( (in < setting_minPointsRemaining *(in+out) || fabs(logf((float)refToFh[0])) > setting_maxLogAffFacInWindow)
-				&& ((int)frameHessians.size())-flagged > setting_minFrames)
+				&& ((int)frameHessians.size())-flagged > setting_minFrames) // still have to remove more frames
 		{
 //			printf("MARGINALIZE frame %d, as only %'d/%'d points remaining (%'d %'d %'d %'d). VisInLast %'d / %'d. traces %d, activated %d!\n",
 //					fh->frameID, in, in+out,
 //					(int)fh->pointHessians.size(), (int)fh->immaturePoints.size(),
-//					(int)fh->pointHessiansMarginalized.size(), (int)fh->pointHessiansOut.size(),
+//					(int)fh->pointHessiansMarginalized.size(), (int)fh->pointHessiansOutlier.size(),
 //					visInLast, outInLast,
 //					fh->statistics_tracesCreatedForThisFrame, fh->statistics_pointsActivatedForThisFrame);
 			fh->flaggedForMarginalization = true;
@@ -102,14 +102,14 @@ void FullSystem::flagFramesForMarginalization(FrameHessian* newFH)
 //			printf("May Keep frame %d, as %'d/%'d points remaining (%'d %'d %'d %'d). VisInLast %'d / %'d. traces %d, activated %d!\n",
 //					fh->frameID, in, in+out,
 //					(int)fh->pointHessians.size(), (int)fh->immaturePoints.size(),
-//					(int)fh->pointHessiansMarginalized.size(), (int)fh->pointHessiansOut.size(),
+//					(int)fh->pointHessiansMarginalized.size(), (int)fh->pointHessiansOutlier.size(),
 //					visInLast, outInLast,
 //					fh->statistics_tracesCreatedForThisFrame, fh->statistics_pointsActivatedForThisFrame);
 		}
 	}
 
 	// marginalize one.
-	if((int)frameHessians.size()-flagged >= setting_maxFrames)
+	if((int)frameHessians.size()-flagged >= setting_maxFrames) // still have to remove frames
 	{
 		double smallestScore = 1;
 		FrameHessian* toMarginalize=0;
@@ -128,7 +128,7 @@ void FullSystem::flagFramesForMarginalization(FrameHessian* newFH)
 				distScore += 1/(1e-5+ffh.distanceLL);
 
 			}
-			distScore *= -sqrtf(fh->targetPrecalc.back().distanceLL);
+			distScore *= -sqrtf(fh->targetPrecalc.back().distanceLL); // find the image that is far away from other image?
 
 
 			if(distScore < smallestScore)

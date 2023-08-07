@@ -813,7 +813,7 @@ void FullSystem::flagPointsForRemoval()
 
 			if(ph->idepth_scaled < setting_minIdepth || ph->residuals.size()==0)
 			{
-				host->pointHessiansOut.push_back(ph);
+				host->pointHessiansOutlier.push_back(ph);
 				ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 				host->pointHessians[i]=0;
 				flag_nores++;
@@ -846,14 +846,14 @@ void FullSystem::flagPointsForRemoval()
 					else
 					{
 						ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
-						host->pointHessiansOut.push_back(ph);
+						host->pointHessiansOutlier.push_back(ph);
 					}
 
 
 				}
 				else
 				{
-					host->pointHessiansOut.push_back(ph);
+					host->pointHessiansOutlier.push_back(ph);
 					ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 
 
@@ -1374,9 +1374,9 @@ void FullSystem::makeKeyFrame( FrameHessian* frame_hessian)
 	frame_hessian->frameID = allKeyFramesHistory.size();
     frame_hessian->shell->keyframeId = frame_hessian->frameID;
 	allKeyFramesHistory.push_back(frame_hessian->shell);
-	ef->insertFrame(frame_hessian, &Hcalib);
+	ef->insertFrame(frame_hessian, &Hcalib); // insert key frame and prepare some matrix. but not the final matrix to solve
 
-	setPrecalcValues();
+	setPrecalcValues(); // pre calc some values including FEJ things
 
 
 
@@ -1565,7 +1565,7 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 
 	firstFrame->pointHessians.reserve(wG[0]*hG[0]*0.2f);
 	firstFrame->pointHessiansMarginalized.reserve(wG[0]*hG[0]*0.2f);
-	firstFrame->pointHessiansOut.reserve(wG[0]*hG[0]*0.2f);
+	firstFrame->pointHessiansOutlier.reserve(wG[0]*hG[0]*0.2f);
 
 
 	float sumID=1e-5, numID=1e-5;
@@ -1655,7 +1655,7 @@ void FullSystem::makeNewTraces(FrameHessian* newFrame, float* gtDepth)
 	newFrame->pointHessians.reserve(numPointsTotal*1.2f);
 	//fh->pointHessiansInactive.reserve(numPointsTotal*1.2f);
 	newFrame->pointHessiansMarginalized.reserve(numPointsTotal*1.2f);
-	newFrame->pointHessiansOut.reserve(numPointsTotal*1.2f);
+	newFrame->pointHessiansOutlier.reserve(numPointsTotal*1.2f);
 
 
 	for(int y=patternPadding+1;y<hG[0]-patternPadding-2;y++)
@@ -1681,10 +1681,10 @@ void FullSystem::setPrecalcValues()
 	{
 		fh->targetPrecalc.resize(frameHessians.size());
 		for(unsigned int i=0;i<frameHessians.size();i++)
-			fh->targetPrecalc[i].set(fh, frameHessians[i], &Hcalib);
+			fh->targetPrecalc[i].set(fh, frameHessians[i], &Hcalib); // pre calc some intermediate values
 	}
 
-	ef->setDeltaF(&Hcalib);
+	ef->setDeltaF(&Hcalib); // set adHTdeltaF values. and some FEJ things to get the delta of current state and FEJ state
 }
 
 

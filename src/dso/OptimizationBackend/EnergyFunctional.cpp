@@ -171,7 +171,11 @@ EnergyFunctional::~EnergyFunctional()
 
 
 
-
+/**
+ * @brief FEJ things
+ * 
+ * @param HCalib 
+ */
 void EnergyFunctional::setDeltaF(CalibHessian* HCalib)
 {
 	if(adHTdeltaF != 0) delete[] adHTdeltaF;
@@ -444,6 +448,14 @@ EFResidual* EnergyFunctional::insertResidual(PointFrameResidual* r)
 	r->efResidual = efr;
 	return efr;
 }
+/**
+ * @brief 
+ * 1. resize matrix to reserve space for new frame
+ * 2. 
+ * @param fh 
+ * @param Hcalib 
+ * @return EFFrame* 
+ */
 EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 {
 	EFFrame* eff = new EFFrame(fh);
@@ -453,11 +465,13 @@ EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 	nFrames++;
 	fh->efFrame = eff;
 
+    // resize matrix
 	assert(HM.cols() == 8*nFrames+CPARS-8);
 	bM.conservativeResize(8*nFrames+CPARS);
     bMForGTSAM.conservativeResize(8 * nFrames + CPARS);
 	HM.conservativeResize(8*nFrames+CPARS,8*nFrames+CPARS);
     HMForGTSAM.conservativeResize(8 * nFrames + CPARS, 8 * nFrames + CPARS);
+    // set newly added elements to 0
 	bM.tail<8>().setZero();
     bMForGTSAM.tail<8>().setZero();
 	HM.rightCols<8>().setZero();
@@ -469,7 +483,7 @@ EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 	EFAdjointsValid=false;
 	EFDeltaValid=false;
 
-	setAdjointsF(Hcalib);
+	setAdjointsF(Hcalib); // prepare the adjoint matrix
 	makeIDX();
 
 
@@ -994,6 +1008,11 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda, CalibHessian* 
 
 
 }
+
+/**
+ * @brief assign ID for frames and point residuals
+ * 
+ */
 void EnergyFunctional::makeIDX()
 {
     for(unsigned int idx=0;idx<frames.size();idx++)

@@ -109,7 +109,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian* fh, CalibHessian* HCalib)
 	int npoints = 	fh->immaturePoints.size() +
 					fh->pointHessians.size() +
 					fh->pointHessiansMarginalized.size() +
-					fh->pointHessiansOut.size();
+					fh->pointHessiansOutlier.size();
 
 	if(numSparseBufferSize < npoints)
 	{
@@ -164,7 +164,7 @@ void KeyFrameDisplay::setFromKF(FrameHessian* fh, CalibHessian* HCalib)
 		numSparsePoints++;
 	}
 
-	for(PointHessian* p : fh->pointHessiansOut)
+	for(PointHessian* p : fh->pointHessiansOutlier)
 	{
 		for(int i=0;i<patternNum;i++)
 			pc[numSparsePoints].color[i] = p->color[i];

@@ -131,7 +131,7 @@ namespace dso
 				for(PointHessian* ph : frameHessians[f]->pointHessiansMarginalized)
 					if(ph!=0) allID.push_back(ph->idepth_scaled);
 
-				for(PointHessian* ph : frameHessians[f]->pointHessiansOut)
+				for(PointHessian* ph : frameHessians[f]->pointHessiansOutlier)
 					if(ph!=0) allID.push_back(ph->idepth_scaled);
 			}
 			std::sort(allID.begin(), allID.end());
@@ -201,7 +201,7 @@ namespace dso
 					if(ph==0) continue;
 					img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, makeRainbow3B(ph->idepth_scaled));
 				}
-				for(PointHessian* ph : frameHessians[f]->pointHessiansOut)
+				for(PointHessian* ph : frameHessians[f]->pointHessiansOutlier)
 					img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,255,255));
 			}
 			else if((int)(freeDebugParam5+0.5f) == 1)
@@ -215,7 +215,7 @@ namespace dso
 				for(PointHessian* ph : frameHessians[f]->pointHessiansMarginalized)
 					img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(0,0,0));
 
-				for(PointHessian* ph : frameHessians[f]->pointHessiansOut)
+				for(PointHessian* ph : frameHessians[f]->pointHessiansOutlier)
 					img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,255,255));
 			}
 			else if((int)(freeDebugParam5+0.5f) == 2)

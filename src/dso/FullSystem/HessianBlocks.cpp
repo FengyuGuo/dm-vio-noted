@@ -114,13 +114,13 @@ void FrameHessian::release()
 	// DELETE RESIDUAL
 	for(unsigned int i=0;i<pointHessians.size();i++) delete pointHessians[i];
 	for(unsigned int i=0;i<pointHessiansMarginalized.size();i++) delete pointHessiansMarginalized[i];
-	for(unsigned int i=0;i<pointHessiansOut.size();i++) delete pointHessiansOut[i];
+	for(unsigned int i=0;i<pointHessiansOutlier.size();i++) delete pointHessiansOutlier[i];
 	for(unsigned int i=0;i<immaturePoints.size();i++) delete immaturePoints[i];
 
 
 	pointHessians.clear();
 	pointHessiansMarginalized.clear();
-	pointHessiansOut.clear();
+	pointHessiansOutlier.clear();
 	immaturePoints.clear();
 }
 

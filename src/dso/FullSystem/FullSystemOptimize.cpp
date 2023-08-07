@@ -686,7 +686,7 @@ void FullSystem::removeOutliers()
 
 			if(ph->residuals.size() == 0)
 			{
-				fh->pointHessiansOut.push_back(ph);
+				fh->pointHessiansOutlier.push_back(ph);
 				ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 				fh->pointHessians[i] = fh->pointHessians.back();
 				fh->pointHessians.pop_back();

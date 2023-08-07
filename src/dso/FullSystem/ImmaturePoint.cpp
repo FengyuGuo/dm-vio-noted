@@ -55,7 +55,7 @@ ImmaturePoint::ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, Ca
 		weights[idx] = sqrtf(setting_outlierTHSumComponent / (setting_outlierTHSumComponent + ptc.tail<2>().squaredNorm()));
 	}
 
-	energyTH = patternNum*setting_outlierTH;
+	energyTH = patternNum*setting_outlierTH; // 12 * 12 * pattern pixel number
 	energyTH *= setting_overallEnergyTHWeight*setting_overallEnergyTHWeight;
 
 	idepth_GT=0;
@@ -136,7 +136,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 	float uMax;
 	float vMax;
 	Vec3f ptpMax;
-	if(std::isfinite(idepth_max)) // normal condition after init. depth is unknown somehow
+	if(std::isfinite(idepth_max)) // normal condition after init. depth is known somehow
 	{
 		ptpMax = pr + hostToFrame_Kt*idepth_max;
 		uMax = ptpMax[0] / ptpMax[2];
@@ -208,19 +208,23 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 
 	// ============== compute error-bounds on result in pixel. if the new interval is not at least 1/2 of the old, SKIP ===================
-	float dx = setting_trace_stepsize*(uMax-uMin);
+	float dx = setting_trace_stepsize*(uMax-uMin); // setting_trace_stepsize is 1.0 by default
 	float dy = setting_trace_stepsize*(vMax-vMin);
 
-	float a = (Vec2f(dx,dy).transpose() * gradH * Vec2f(dx,dy));
-	float b = (Vec2f(dy,-dx).transpose() * gradH * Vec2f(dy,-dx));
-	float errorInPixel = 0.2f + 0.2f * (a+b) / a; // what is going on?
-
+	// seems to be similar like harris corner detection. see https://docs.opencv.org/3.2.0/d4/d7d/tutorial_harris_detector.html
+	float a = (Vec2f(dx,dy).transpose() * gradH * Vec2f(dx,dy)); // gray scale channge w.r.t image gradient
+	float b = (Vec2f(dy,-dx).transpose() * gradH * Vec2f(dy,-dx)); //  gray scale change in orthognal direction w.r.t image gradient 
+	float errorInPixel = 0.2f + 0.2f * (a+b) / a; 
+	// 0.4 + 0.2 * b / a. see next line of code. 
+	// we prefer points that have large change in search direction but small change in orthognal direction. say edge points and movement direction is orthognal to the edge
+	
+	// trace_minImprovementFactor = 1.5
 	if(errorInPixel*setting_trace_minImprovementFactor > dist && std::isfinite(idepth_max))
 	{
 		if(debugPrint)
 			printf("NO SIGNIFICANT IMPROVMENT (%f)!\n", errorInPixel);
-		lastTraceUV = Vec2f(uMax+uMin, vMax+vMin)*0.5;
-		lastTracePixelInterval=dist;
+		lastTraceUV = Vec2f(uMax+uMin, vMax+vMin)*0.5; // middle point of search
+		lastTracePixelInterval=dist; // distance of search
 		return lastTraceStatus = ImmaturePointStatus::IPS_BADCONDITION;
 	}
 
@@ -241,14 +245,14 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 				);
 
 
-	if(dist>maxPixSearch)
+	if(dist>maxPixSearch) // maximum search distance
 	{
 		uMax = uMin + maxPixSearch*dx;
 		vMax = vMin + maxPixSearch*dy;
 		dist = maxPixSearch;
 	}
 
-	int numSteps = 1.9999f + dist / setting_trace_stepsize;
+	int numSteps = 1.9999f + dist / setting_trace_stepsize; // trace_stepsize is 1.0 by default. steps is 2.0 minimum. 99 maximum. see code below.
 
 	float randShift = uMin*1000-floorf(uMin*1000);
 	float ptx = uMin-randShift*dx;
@@ -257,7 +261,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 
 
-    if(!std::isfinite(dx) || !std::isfinite(dy))
+    if(!std::isfinite(dx) || !std::isfinite(dy)) // in case of dist = 0
 	{
 		//printf("COUGHT INF / NAN dxdy (%f %f)!\n", dx, dx);
 
@@ -273,7 +277,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 	int bestIdx=-1;
 	if(numSteps >= 100) numSteps = 99;
 
-	for(int i=0;i<numSteps;i++)
+	for(int i=0;i<numSteps;i++) // linear search to find best matching point
 	{
 		float energy=0;
 		for(int idx=0;idx<patternNum;idx++)
@@ -285,8 +289,8 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 			if(!std::isfinite(hitColor)) {energy+=1e5; continue;}
 			float residual = hitColor - (float)(hostToFrame_affine[0] * color[idx] + hostToFrame_affine[1]);
-			float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
-			energy += hw *residual*residual*(2-hw);
+			float huber_weight = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+			energy += huber_weight *residual*residual*(2-huber_weight); // total photometric loss w.r.t. huber loss
 		}
 
 		if(debugPrint)
@@ -309,18 +313,19 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 	float secondBest=1e10;
 	for(int i=0;i<numSteps;i++)
 	{
-		if((i < bestIdx-setting_minTraceTestRadius || i > bestIdx+setting_minTraceTestRadius) && errors[i] < secondBest)
+		if((i < bestIdx-setting_minTraceTestRadius || i > bestIdx+setting_minTraceTestRadius) && errors[i] < secondBest) // setting_minTraceTestRadius is 2 by default
 			secondBest = errors[i];
 	}
 	float newQuality = secondBest / bestEnergy;
-	if(newQuality < quality || numSteps > 10) quality = newQuality;
+	if(newQuality < quality || numSteps > 10) quality = newQuality; // if the best matching result is much better than others
 
 
 	// ============== do GN optimization ===================
+	// GN method to optimize matching result to find the best matching considering the match pattern
 	float uBak=bestU, vBak=bestV, gnstepsize=1, stepBack=0;
 	if(setting_trace_GNIterations>0) bestEnergy = 1e5;
 	int gnStepsGood=0, gnStepsBad=0;
-	for(int it=0;it<setting_trace_GNIterations;it++)
+	for(int it=0;it<setting_trace_GNIterations;it++) // by default 3 iterations
 	{
 		float H = 1, b=0, energy=0;
 		for(int idx=0;idx<patternNum;idx++)
@@ -340,11 +345,11 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 			if(!std::isfinite((float)hitColor[0])) {energy+=1e5; continue;}
 			float residual = hitColor[0] - (hostToFrame_affine[0] * color[idx] + hostToFrame_affine[1]);
 			float dResdDist = dx*hitColor[1] + dy*hitColor[2];
-			float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+			float huber_weight = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
 
-			H += hw*dResdDist*dResdDist;
-			b += hw*residual*dResdDist;
-			energy += weights[idx]*weights[idx]*hw *residual*residual*(2-hw);
+			H += huber_weight*dResdDist*dResdDist;
+			b += huber_weight*residual*dResdDist;
+			energy += weights[idx]*weights[idx]*huber_weight *residual*residual*(2-huber_weight);
 		}
 
 
@@ -393,7 +398,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 //	float absGrad0 = getInterpolatedElement(frame->absSquaredGrad[0],bestU, bestV, wG[0]);
 //	float absGrad1 = getInterpolatedElement(frame->absSquaredGrad[1],bestU*0.5-0.25, bestV*0.5-0.25, wG[1]);
 //	float absGrad2 = getInterpolatedElement(frame->absSquaredGrad[2],bestU*0.25-0.375, bestV*0.25-0.375, wG[2]);
-	if(!(bestEnergy < energyTH*setting_trace_extraSlackOnTH))
+	if(!(bestEnergy < energyTH*setting_trace_extraSlackOnTH)) // setting_trace_extraSlackOnTH is 1.2 by default. energyTH is 12 * 12 * 8 by default pattern
 //			|| (absGrad0*areaGradientSlackFactor < host->frameGradTH
 //		     && absGrad1*areaGradientSlackFactor < host->frameGradTH*0.75f
 //			 && absGrad2*areaGradientSlackFactor < host->frameGradTH*0.50f))
@@ -404,14 +409,14 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 		lastTracePixelInterval=0;
 		lastTraceUV = Vec2f(-1,-1);
 		if(lastTraceStatus == ImmaturePointStatus::IPS_OUTLIER)
-			return lastTraceStatus = ImmaturePointStatus::IPS_OOB;
+			return lastTraceStatus = ImmaturePointStatus::IPS_OOB; // 2 time outlier then OOB
 		else
-			return lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER;
+			return lastTraceStatus = ImmaturePointStatus::IPS_OUTLIER; // loss is too large.
 	}
 
 
 	// ============== set new interval ===================
-	if(dx*dx>dy*dy)
+	if(dx*dx>dy*dy) // something like depth filter to update depth estimation?
 	{
 		idepth_min = (pr[2]*(bestU-errorInPixel*dx) - pr[0]) / (hostToFrame_Kt[0] - hostToFrame_Kt[2]*(bestU-errorInPixel*dx));
 		idepth_max = (pr[2]*(bestU+errorInPixel*dx) - pr[0]) / (hostToFrame_Kt[0] - hostToFrame_Kt[2]*(bestU+errorInPixel*dx));

@@ -123,6 +123,7 @@ public:
 	IndexThreadReduce<Vec10>* red;
 
 
+	// if 2 frames have viewed same points?
 	std::map<uint64_t,
 	  Eigen::Vector2i,
 	  std::less<uint64_t>,
@@ -144,6 +145,8 @@ private:
 
 	void orthogonalize(VecX* b, MatXX* H);
 	Mat18f* adHTdeltaF;
+
+	// meaning of these matrix?
 
 	Mat88* adHost;
 	Mat88* adTarget;

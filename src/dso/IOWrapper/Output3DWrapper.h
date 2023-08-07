@@ -107,7 +107,7 @@ namespace IOWrap
  *      ->immaturePoints: contains points that have not been "activated" (they do however have a depth initialization).
  *      ->pointHessians: contains active points.
  *      ->pointHessiansMarginalized: contains marginalized points.
- *      ->pointHessiansOut: contains outlier points.
+ *      ->pointHessiansOutlier: contains outlier points.
  *
  *      ->frameID: incremental ID for keyframes only.
  *      ->shell: corresponding [FrameShell] struct.

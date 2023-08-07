@@ -76,7 +76,10 @@ class EFPoint;
 #define SCALE_A_INVERSE (1.0f / SCALE_A)
 #define SCALE_B_INVERSE (1.0f / SCALE_B)
 
-
+/**
+ * @brief struct to hold intermediate values for future solving
+ * 
+ */
 struct FrameFramePrecalc
 {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -140,7 +143,7 @@ struct FrameHessian
 
 	std::vector<PointHessian*> pointHessians;				// contains all ACTIVE points.
 	std::vector<PointHessian*> pointHessiansMarginalized;	// contains all MARGINALIZED points (= fully marginalized, usually because point went OOB.)
-	std::vector<PointHessian*> pointHessiansOut;		// contains all OUTLIER points (= discarded.).
+	std::vector<PointHessian*> pointHessiansOutlier;		// contains all OUTLIER points (= discarded.).
 	std::vector<ImmaturePoint*> immaturePoints;			// contains all IMMATURE points (= not outlier nor active)
 
 
