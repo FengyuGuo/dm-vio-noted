@@ -54,7 +54,7 @@ KeyFrameDisplay::KeyFrameDisplay()
 
 	id = 0;
 	active= true;
-	camToWorld = SE3();
+	camToWorld = SE3d();
 
 	needRefresh=true;
 
@@ -84,7 +84,7 @@ void KeyFrameDisplay::setFromF(FrameShell* frame, CalibHessian* HCalib)
 	needRefresh=true;
 }
 
-void KeyFrameDisplay::setFromPose(const Sophus::SE3& pose, CalibHessian *HCalib)
+void KeyFrameDisplay::setFromPose(const Sophus::SE3d& pose, CalibHessian *HCalib)
 {
 	id = 0;
 	fx = HCalib->fxl();

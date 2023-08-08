@@ -45,7 +45,7 @@ namespace dso
 #define todouble(x) (x).cast<double>()
 
 
-typedef Sophus::SE3d SE3;
+typedef Sophus::SE3d SE3d;
 typedef Sophus::Sim3d Sim3;
 typedef Sophus::SO3d SO3;
 

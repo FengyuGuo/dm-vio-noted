@@ -318,7 +318,7 @@ public:
                 // EuRoC format with bias GT.
                 Eigen::Vector3d translation(p1, p2, p3);
                 Eigen::Quaterniond quat(qw, qx, qy, qz);
-                Sophus::SE3 pose(quat, translation);
+                Sophus::SE3d pose(quat, translation);
                 Eigen::Vector3d velocity(v1, v2, v3);
                 Eigen::Vector3d biasRot(br1, br2, br3);
                 Eigen::Vector3d biasPos(bp1, bp2, bp3);
@@ -330,7 +330,7 @@ public:
                 // TUM-VI format
                 Eigen::Vector3d translation(p1, p2, p3);
                 Eigen::Quaterniond quat(qw, qx, qy, qz);
-                Sophus::SE3 pose(quat, translation);
+                Sophus::SE3d pose(quat, translation);
                 Eigen::Vector3d velocity(0.0, 0.0, 0.0);
                 Eigen::Vector3d biasRot(0.0, 0.0, 0.0);
                 Eigen::Vector3d biasPos(0.0, 0.0, 0.0);

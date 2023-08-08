@@ -73,7 +73,7 @@ public:
 	int neighbours[10];
 	float neighboursDist[10];
 
-	float my_type;
+	float point_type;
 	float outlierTH;
 };
 
@@ -94,7 +94,7 @@ public:
 	Pnt* points[PYR_LEVELS];
 	int numPoints[PYR_LEVELS];
 	AffLight thisToNext_aff;
-	SE3 thisToNext;
+	SE3d thisToNext;
 
 
 	FrameHessian* firstFrame;
@@ -145,7 +145,7 @@ private:
 			int lvl,
 			Mat88f &H_out, Vec8f &b_out,
 			Mat88f &H_out_sc, Vec8f &b_out_sc,
-			const SE3 &refToNew, AffLight refToNew_aff,
+			const SE3d &refToNew, AffLight refToNew_aff,
 			bool plot);
 	Vec3f calcEC(int lvl); // returns OLD NERGY, NEW ENERGY, NUM TERMS.
 	void optReg(int lvl);
@@ -161,7 +161,7 @@ private:
 	void makeGradients(Eigen::Vector3f** data);
 
     void debugPlot(int lvl, std::vector<IOWrap::Output3DWrapper*> &wraps);
-	void makeNN();
+	void refreshPtsParentInfo();
 };
 
 

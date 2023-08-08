@@ -153,7 +153,7 @@ public:
 
 	Vec8 prior;				// prior hessian (diagonal)
 	Vec8 delta_prior;		// = state-state_prior (E_prior = (delta_prior)' * diag(prior) * (delta_prior)
-	Vec8 delta;				// state - state_zero.
+	Vec8 delta;				// state - state_FEJ.
 
 
 

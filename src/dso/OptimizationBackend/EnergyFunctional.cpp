@@ -59,7 +59,7 @@ void EnergyFunctional::setAdjointsF(CalibHessian* Hcalib)
 			FrameHessian* host = frames[h]->data;
 			FrameHessian* target = frames[t]->data;
 
-			SE3 hostToTarget = target->get_worldToCam_evalPT() * host->get_worldToCam_evalPT().inverse();
+			SE3d hostToTarget = target->get_worldToCam_evalPT() * host->get_worldToCam_evalPT().inverse();
 
 			Mat88 AH = Mat88::Identity();
 			Mat88 AT = Mat88::Identity();
@@ -184,14 +184,14 @@ void EnergyFunctional::setDeltaF(CalibHessian* HCalib)
 		for(int t=0;t<nFrames;t++)
 		{
 			int idx = h+t*nFrames;
-			adHTdeltaF[idx] = frames[h]->data->get_state_minus_stateZero().head<8>().cast<float>().transpose() * adHostF[idx]
-					        +frames[t]->data->get_state_minus_stateZero().head<8>().cast<float>().transpose() * adTargetF[idx];
+			adHTdeltaF[idx] = frames[h]->data->get_state_minus_stateFEJ().head<8>().cast<float>().transpose() * adHostF[idx]
+					        +frames[t]->data->get_state_minus_stateFEJ().head<8>().cast<float>().transpose() * adTargetF[idx];
 		}
 
 	cDeltaF = HCalib->value_minus_value_zero.cast<float>();
 	for(EFFrame* f : frames)
 	{
-		f->delta = f->data->get_state_minus_stateZero().head<8>();
+		f->delta = f->data->get_state_minus_stateFEJ().head<8>();
 		f->delta_prior = (f->data->get_state() - f->data->getPriorZero()).head<8>();
 
 		for(EFPoint* p : f->points)
@@ -442,7 +442,7 @@ EFResidual* EnergyFunctional::insertResidual(PointFrameResidual* r)
 	efr->idxInAll = r->point->efPoint->residualsAll.size();
 	r->point->efPoint->residualsAll.push_back(efr);
 
-    connectivityMap[(((uint64_t)efr->host->frameID) << 32) + ((uint64_t)efr->target->frameID)][0]++;
+    frameConnectivityMap[(((uint64_t)efr->host->frameID) << 32) + ((uint64_t)efr->target->frameID)][0]++;
 
 	nResiduals++;
 	r->efResidual = efr;
@@ -489,9 +489,9 @@ EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 
 	for(EFFrame* fh2 : frames)
 	{
-        connectivityMap[(((uint64_t)eff->frameID) << 32) + ((uint64_t)fh2->frameID)] = Eigen::Vector2i(0,0);
+        frameConnectivityMap[(((uint64_t)eff->frameID) << 32) + ((uint64_t)fh2->frameID)] = Eigen::Vector2i(0,0);
 		if(fh2 != eff)
-            connectivityMap[(((uint64_t)fh2->frameID) << 32) + ((uint64_t)eff->frameID)] = Eigen::Vector2i(0,0);
+            frameConnectivityMap[(((uint64_t)fh2->frameID) << 32) + ((uint64_t)eff->frameID)] = Eigen::Vector2i(0,0);
 	}
 
 	return eff;
@@ -527,11 +527,17 @@ void EnergyFunctional::dropResidual(EFResidual* r)
 		r->host->data->shell->statistics_outlierResOnThis++;
 
 
-    connectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][0]--;
+    frameConnectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][0]--;
 	nResiduals--;
 	r->data->efResidual=0;
 	delete r;
 }
+
+/**
+ * @brief marginalize the frame and update matrix
+ * 
+ * @param fh 
+ */
 
 void EnergyFunctional::marginalizeFrame(EFFrame* fh)
 {
@@ -541,8 +547,8 @@ void EnergyFunctional::marginalizeFrame(EFFrame* fh)
 	assert(EFIndicesValid);
 
 	assert((int)fh->points.size()==0);
-	int ndim = nFrames*8+CPARS-8;// new dimension
-	int odim = nFrames*8+CPARS;// old dimension
+	int new_dim = nFrames*8+CPARS-8;// new dimension. frame pose and photometric params are marginalized.
+	int old_dim = nFrames*8+CPARS;// old dimension
 
 
 //	VecX eigenvaluesPre = HM.eigenvalues().real();
@@ -554,9 +560,9 @@ void EnergyFunctional::marginalizeFrame(EFFrame* fh)
         // When adding additional factors with GTSAM they need to be accounted for during keyframe marginalization.
         // Hence we move the whole keyframe marginalization to the GTSAMIntegration.
         dmvio::TimeMeasurement innerMeas("MainMarginalization");
-        assert(odim == (int)HM.rows());
-        assert(odim == (int)HM.cols());
-        assert(odim == (int)bM.size());
+        assert(old_dim == (int)HM.rows());
+        assert(old_dim == (int)HM.cols());
+        assert(old_dim == (int)bM.size());
 
         // Adds H and b from the last points to the graph. Needs the current evaluation point for each frames.
         gtsamIntegration.addMarginalizedPointsBA(HMForGTSAM, bMForGTSAM, frames);
@@ -571,8 +577,8 @@ void EnergyFunctional::marginalizeFrame(EFFrame* fh)
         // Marginalizes out the frame. Adds the symbols of this frame and then calls marginalize out.
         gtsamIntegration.marginalizeBAFrame(fh);
 
-        HMForGTSAM.resize(ndim, ndim);
-        bMForGTSAM.resize(ndim);
+        HMForGTSAM.resize(new_dim, new_dim);
+        bMForGTSAM.resize(new_dim);
 
         HMForGTSAM.setZero();
         bMForGTSAM.setZero();
@@ -594,14 +600,14 @@ void EnergyFunctional::marginalizeFrame(EFFrame* fh)
             bM.segment(io,ntail) = tailTMP;
             bM.tail<8>() = bTmp;
 
-            MatXX HtmpCol = HM.block(0,io,odim,8);
+            MatXX HtmpCol = HM.block(0,io,old_dim,8);
             MatXX rightColsTmp = HM.rightCols(ntail);
-            HM.block(0,io,odim,ntail) = rightColsTmp;
+            HM.block(0,io,old_dim,ntail) = rightColsTmp;
             HM.rightCols(8) = HtmpCol;
 
-            MatXX HtmpRow = HM.block(io,0,8,odim);
+            MatXX HtmpRow = HM.block(io,0,8,old_dim);
             MatXX botRowsTmp = HM.bottomRows(ntail);
-            HM.block(io,0,ntail,odim) = botRowsTmp;
+            HM.block(io,0,ntail,old_dim) = botRowsTmp;
             HM.bottomRows(8) = HtmpRow;
         }
 
@@ -632,24 +638,24 @@ void EnergyFunctional::marginalizeFrame(EFFrame* fh)
         hpi = 0.5f*(hpi+hpi);
 
         // schur-complement!
-        MatXX bli = HMScaled.bottomLeftCorner(8,ndim).transpose() * hpi;
-        HMScaled.topLeftCorner(ndim,ndim).noalias() -= bli * HMScaled.bottomLeftCorner(8,ndim);
-        bMScaled.head(ndim).noalias() -= bli*bMScaled.tail<8>();
+        MatXX bli = HMScaled.bottomLeftCorner(8,new_dim).transpose() * hpi;
+        HMScaled.topLeftCorner(new_dim,new_dim).noalias() -= bli * HMScaled.bottomLeftCorner(8,new_dim);
+        bMScaled.head(new_dim).noalias() -= bli*bMScaled.tail<8>();
 
         //unscale!
         HMScaled = SVec.asDiagonal() * HMScaled * SVec.asDiagonal();
         bMScaled = SVec.asDiagonal() * bMScaled;
 
         // set.
-        HM = 0.5*(HMScaled.topLeftCorner(ndim,ndim) + HMScaled.topLeftCorner(ndim,ndim).transpose());
-        bM = bMScaled.head(ndim);
+        HM = 0.5*(HMScaled.topLeftCorner(new_dim,new_dim) + HMScaled.topLeftCorner(new_dim,new_dim).transpose());
+        bM = bMScaled.head(new_dim);
 
         // With the imu-integration this cannot be used, because there are other variables that have to be considered.
     }else
     {
         // Just update the dimensions without actually marginalizing, as these are not used in practice.
-        HM = HM.topLeftCorner(ndim, ndim);
-        bM = bM.head(ndim);
+        HM = HM.topLeftCorner(new_dim, new_dim);
+        bM = bM.head(new_dim);
     }
 
 
@@ -707,7 +713,7 @@ void EnergyFunctional::marginalizePointsF()
                 p->priorF *= setting_idepthFixPriorMargFac;
                 for(EFResidual* r : p->residualsAll)
                     if(r->isActive())
-                        connectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][1]++;
+                        frameConnectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][1]++;
                 allPointsToMarg.push_back(p);
             }
         }

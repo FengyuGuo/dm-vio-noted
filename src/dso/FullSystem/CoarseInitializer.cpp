@@ -49,7 +49,7 @@ namespace dso
 {
 
 CoarseInitializer::CoarseInitializer(int ww, int hh)
-        : thisToNext_aff(0, 0), thisToNext(SE3())
+        : thisToNext_aff(0, 0), thisToNext(SE3d())
 {
 	for(int lvl=0; lvl<pyrLevelsUsed; lvl++)
 	{
@@ -114,7 +114,7 @@ bool CoarseInitializer::trackFrame(FrameHessian *newFrameHessian, std::vector<IO
 	}
 
 
-	SE3 refToNew_current = thisToNext;
+	SE3d refToNew_current = thisToNext;
 
 	AffLight refToNew_aff_current = thisToNext_aff;
 
@@ -166,7 +166,7 @@ bool CoarseInitializer::trackFrame(FrameHessian *newFrameHessian, std::vector<IO
 
 
             Vec8f inc;
-            SE3 refToNew_new;
+            SE3d refToNew_new;
             if (fixAffine)
             {
                 // Note as we set the weights of rotation and translation to 1 the wM is just the identity in this case.
@@ -178,7 +178,7 @@ bool CoarseInitializer::trackFrame(FrameHessian *newFrameHessian, std::vector<IO
 
             double incNorm = inc.norm();
 
-            refToNew_new = SE3::exp(inc.head<6>().cast<double>()) * refToNew_current;
+            refToNew_new = SE3d::exp(inc.head<6>().cast<double>()) * refToNew_current;
 
 			AffLight refToNew_aff_new = refToNew_aff_current;
 			refToNew_aff_new.a += inc[6];
@@ -333,7 +333,7 @@ void CoarseInitializer::debugPlot(int lvl, std::vector<IOWrap::Output3DWrapper*>
 Vec3f CoarseInitializer::calcResAndGS(
 		int lvl, Mat88f &H_out, Vec8f &b_out,
 		Mat88f &H_out_sc, Vec8f &b_out_sc,
-		const SE3 &refToNew, AffLight refToNew_aff,
+		const SE3d &refToNew, AffLight refToNew_aff,
 		bool plot)
 {
 	int wl = w[lvl], hl = h[lvl];
@@ -809,19 +809,19 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 
 	PixelSelector sel(w[0],h[0]);
 
-	float* statusMap = new float[w[0]*h[0]];
-	bool* statusMapB = new bool[w[0]*h[0]];
+	float* selectMap = new float[w[0]*h[0]];
+	bool* selectMapBool = new bool[w[0]*h[0]];
 
 	float densities[] = {0.03,0.05,0.15,0.5,1};
 	for(int lvl=0; lvl<pyrLevelsUsed; lvl++)
 	{
 		sel.currentPotential = 3;
 		int npts;
-		if(lvl == 0)
-			npts = sel.makeMaps(firstFrame, statusMap,densities[lvl]*w[0]*h[0],1,false,2);
+		if(lvl == 0) //			frame		out_map		num_points					recursive_left 	plot	threshold_factor
+			npts = sel.makeMaps(firstFrame, selectMap, 	densities[lvl]*w[0]*h[0], 	1, 				false, 	2);
 		else
-			npts = makePixelStatus(firstFrame->dIp[lvl], statusMapB, w[lvl], h[lvl], densities[lvl]*w[0]*h[0]);
-
+			npts = makePixelStatus(firstFrame->dIp[lvl], selectMapBool, w[lvl], h[lvl], densities[lvl]*w[0]*h[0]);
+				// seems old version of pixel selector. not so complex method
 
 
 		if(points[lvl] != 0) delete[] points[lvl];
@@ -835,7 +835,7 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 		for(int x=patternPadding+1;x<wl-patternPadding-2;x++)
 		{
 			//if(x==2) printf("y=%d!\n",y);
-			if((lvl!=0 && statusMapB[x+y*wl]) || (lvl==0 && statusMap[x+y*wl] != 0))
+			if((lvl!=0 && selectMapBool[x+y*wl]) || (lvl==0 && selectMap[x+y*wl] != 0))
 			{
 				//assert(patternNum==9);
 				pl[nl].u = x+0.1;
@@ -846,7 +846,7 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 				pl[nl].energy.setZero();
 				pl[nl].lastHessian=0;
 				pl[nl].lastHessian_new=0;
-				pl[nl].my_type= (lvl!=0) ? 1 : statusMap[x+y*wl];
+				pl[nl].point_type= (lvl!=0) ? 1 : selectMap[x+y*wl];
 
 				Eigen::Vector3f* cpt = firstFrame->dIp[lvl] + x + y*w[lvl];
 				float sumGrad2=0;
@@ -874,12 +874,12 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 
 		numPoints[lvl]=nl;
 	}
-	delete[] statusMap;
-	delete[] statusMapB;
+	delete[] selectMap;
+	delete[] selectMapBool;
 
-	makeNN();
+	refreshPtsParentInfo();
 
-	thisToNext=SE3();
+	thisToNext=SE3d();
 	snapped = false;
 	frameID = snappedAt = 0;
 
@@ -998,7 +998,7 @@ void CoarseInitializer::makeK(CalibHessian* HCalib)
 
 
 
-void CoarseInitializer::makeNN()
+void CoarseInitializer::refreshPtsParentInfo()
 {
 	const float NNDistFactor=0.05;
 

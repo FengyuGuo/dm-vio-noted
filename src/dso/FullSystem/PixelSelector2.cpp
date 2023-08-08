@@ -94,7 +94,7 @@ int computeHistQuantil(int* hist, float below)
 void PixelSelector::makeHists(const FrameHessian* const fh)
 {
 	gradHistFrame = fh;
-	float * mapmax0 = fh->absSquaredGrad[0];
+	float * img_gradient_sqr = fh->absSquaredGrad[0];
 
 	int w = wG[0];
 	int h = hG[0];
@@ -106,8 +106,8 @@ void PixelSelector::makeHists(const FrameHessian* const fh)
 	for(int y=0;y<h32;y++)
 		for(int x=0;x<w32;x++)
 		{
-			float* map0 = mapmax0+bW*x+bH*y*w;
-			int* hist0 = gradHist;// + 50*(x+y*w32);
+			float* map0 = img_gradient_sqr+bW*x+bH*y*w;
+			int* hist0 = gradHist;// + 50*(x+y*w32); // gradient histgram
 			memset(hist0,0,sizeof(int)*50);
 
 			for(int j=0;j<bH;j++) for(int i=0;i<bW;i++)
@@ -118,10 +118,10 @@ void PixelSelector::makeHists(const FrameHessian* const fh)
 				int g = sqrtf(map0[i+j*w]);
 				if(g>48) g=48;
 				hist0[g+1]++;
-				hist0[0]++;
+				hist0[0]++; // number of pixels
 			}
 
-			ths[x+y*w32] = computeHistQuantil(hist0,setting_minGradHistCut) + setting_minGradHistAdd;
+			ths[x+y*w32] = computeHistQuantil(hist0,setting_minGradHistCut) + setting_minGradHistAdd; // deter image gradient threshold for pixel selector
 		}
 
 	for(int y=0;y<h32;y++)
@@ -157,10 +157,10 @@ void PixelSelector::makeHists(const FrameHessian* const fh)
 }
 int PixelSelector::makeMaps(
 		const FrameHessian* const fh,
-		float* map_out, float density, int recursionsLeft, bool plot, float thFactor)
+		float* map_out, float num_points, int recursionsLeft, bool plot, float thFactor)
 {
 	float numHave=0;
-	float numWant=density;
+	float numWant=num_points;
 	float quotia;
 	int idealPotential = currentPotential;
 
@@ -194,7 +194,7 @@ int PixelSelector::makeMaps(
 
 
 		// the number of selected pixels behaves approximately as
-		// K / (pot+1)^2, where K is a scene-dependent constant.
+		// K / (potential+1)^2, where K is a scene-dependent constant.
 		// we will allow sub-selecting pixels by up to a quotia of 0.25, otherwise we will re-select.
 
 		if(fh != gradHistFrame) makeHists(fh);
@@ -218,13 +218,13 @@ int PixelSelector::makeMaps(
 			if(idealPotential>=currentPotential)
 				idealPotential = currentPotential-1;
 
-	//		printf("PixelSelector: have %.2f%%, need %.2f%%. RESAMPLE with pot %d -> %d.\n",
+	//		printf("PixelSelector: have %.2f%%, need %.2f%%. RESAMPLE with potential %d -> %d.\n",
 	//				100*numHave/(float)(wG[0]*hG[0]),
 	//				100*numWant/(float)(wG[0]*hG[0]),
 	//				currentPotential,
 	//				idealPotential);
 			currentPotential = idealPotential;
-			return makeMaps(fh,map_out, density, recursionsLeft-1, plot,thFactor);
+			return makeMaps(fh,map_out, num_points, recursionsLeft-1, plot,thFactor);
 		}
 		else if(recursionsLeft>0 && quotia < 0.25)
 		{
@@ -233,13 +233,13 @@ int PixelSelector::makeMaps(
 			if(idealPotential<=currentPotential)
 				idealPotential = currentPotential+1;
 
-	//		printf("PixelSelector: have %.2f%%, need %.2f%%. RESAMPLE with pot %d -> %d.\n",
+	//		printf("PixelSelector: have %.2f%%, need %.2f%%. RESAMPLE with potential %d -> %d.\n",
 	//				100*numHave/(float)(wG[0]*hG[0]),
 	//				100*numWant/(float)(wG[0]*hG[0]),
 	//				currentPotential,
 	//				idealPotential);
 			currentPotential = idealPotential;
-			return makeMaps(fh,map_out, density, recursionsLeft-1, plot,thFactor);
+			return makeMaps(fh,map_out, num_points, recursionsLeft-1, plot,thFactor);
 
 		}
 	}
@@ -254,7 +254,7 @@ int PixelSelector::makeMaps(
 		{
 			if(map_out[i] != 0)
 			{
-				if(randomPattern[rn] > charTH )
+				if(randomPattern[rn] > charTH ) // randomly drop some points
 				{
 					map_out[i]=0;
 					numHaveSub--;
@@ -264,7 +264,7 @@ int PixelSelector::makeMaps(
 		}
 	}
 
-//	printf("PixelSelector: have %.2f%%, need %.2f%%. KEEPCURR with pot %d -> %d. Subsampled to %.2f%%\n",
+//	printf("PixelSelector: have %.2f%%, need %.2f%%. KEEPCURR with potential %d -> %d. Subsampled to %.2f%%\n",
 //			100*numHave/(float)(wG[0]*hG[0]),
 //			100*numWant/(float)(wG[0]*hG[0]),
 //			currentPotential,
@@ -306,17 +306,17 @@ int PixelSelector::makeMaps(
 	return numHaveSub;
 }
 
-
+// check https://rancheng.github.io/gradient-pixel-selector/ for better understanding for this complex function!!
 
 Eigen::Vector3i PixelSelector::select(const FrameHessian* const fh,
-		float* map_out, int pot, float thFactor)
+		float* map_out, int potential, float thFactor)
 {
 
 	Eigen::Vector3f const * const map0 = fh->dI;
 
-	float * mapmax0 = fh->absSquaredGrad[0];
-	float * mapmax1 = fh->absSquaredGrad[1];
-	float * mapmax2 = fh->absSquaredGrad[2];
+	float * img_gradient_sqr = fh->absSquaredGrad[0];
+	float * img_gradient_sqr_1 = fh->absSquaredGrad[1];
+	float * img_gradient_sqr_2 = fh->absSquaredGrad[2];
 
 
 	int w = wG[0];
@@ -347,31 +347,31 @@ Eigen::Vector3i PixelSelector::select(const FrameHessian* const fh,
 
 
 
-	float dw1 = setting_gradDownweightPerLevel;
-	float dw2 = dw1*dw1;
+	float down_weight = setting_gradDownweightPerLevel;
+	float down_weight_sqr = down_weight*down_weight;
 
 
 	int n3=0, n2=0, n4=0;
-	for(int y4=0;y4<h;y4+=(4*pot)) for(int x4=0;x4<w;x4+=(4*pot))
+	for(int y4=0;y4<h;y4+=(4*potential)) for(int x4=0;x4<w;x4+=(4*potential))
 	{
-		int my3 = std::min((4*pot), h-y4);
-		int mx3 = std::min((4*pot), w-x4);
+		int my3 = std::min((4*potential), h-y4);
+		int mx3 = std::min((4*potential), w-x4);
 		int bestIdx4=-1; float bestVal4=0;
 		Vec2f dir4 = directions[randomPattern[n2] & 0xF];
-		for(int y3=0;y3<my3;y3+=(2*pot)) for(int x3=0;x3<mx3;x3+=(2*pot))
+		for(int y3=0;y3<my3;y3+=(2*potential)) for(int x3=0;x3<mx3;x3+=(2*potential))
 		{
 			int x34 = x3+x4;
 			int y34 = y3+y4;
-			int my2 = std::min((2*pot), h-y34);
-			int mx2 = std::min((2*pot), w-x34);
+			int my2 = std::min((2*potential), h-y34);
+			int mx2 = std::min((2*potential), w-x34);
 			int bestIdx3=-1; float bestVal3=0;
 			Vec2f dir3 = directions[randomPattern[n2] & 0xF];
-			for(int y2=0;y2<my2;y2+=pot) for(int x2=0;x2<mx2;x2+=pot)
+			for(int y2=0;y2<my2;y2+=potential) for(int x2=0;x2<mx2;x2+=potential)
 			{
 				int x234 = x2+x34;
 				int y234 = y2+y34;
-				int my1 = std::min(pot, h-y234);
-				int mx1 = std::min(pot, w-x234);
+				int my1 = std::min(potential, h-y234);
+				int mx1 = std::min(potential, w-x234);
 				int bestIdx2=-1; float bestVal2=0;
 				Vec2f dir2 = directions[randomPattern[n2] & 0xF];
 				for(int y1=0;y1<my1;y1+=1) for(int x1=0;x1<mx1;x1+=1)
@@ -386,40 +386,40 @@ Eigen::Vector3i PixelSelector::select(const FrameHessian* const fh,
 
 
                     float pixelTH0 = thsSmoothed[xf / bW + (yf / bH) * thsStep];
-					float pixelTH1 = pixelTH0*dw1;
-					float pixelTH2 = pixelTH1*dw2;
+					float pixelTH1 = pixelTH0*down_weight;
+					float pixelTH2 = pixelTH1*down_weight_sqr;
 
 
-					float ag0 = mapmax0[idx];
-					if(ag0 > pixelTH0*thFactor)
+					float gradient0 = img_gradient_sqr[idx];
+					if(gradient0 > pixelTH0*thFactor)
 					{
-						Vec2f ag0d = map0[idx].tail<2>();
-						float dirNorm = fabsf((float)(ag0d.dot(dir2)));
-						if(!setting_selectDirectionDistribution) dirNorm = ag0;
+						Vec2f img_gradient = map0[idx].tail<2>();
+						float dirNorm = fabsf((float)(img_gradient.dot(dir2)));
+						if(!setting_selectDirectionDistribution) dirNorm = gradient0; //  this line will NEVER be executed. selectDirectionDistribution is true.
 
 						if(dirNorm > bestVal2)
 						{ bestVal2 = dirNorm; bestIdx2 = idx; bestIdx3 = -2; bestIdx4 = -2;}
 					}
 					if(bestIdx3==-2) continue;
 
-					float ag1 = mapmax1[(int)(xf*0.5f+0.25f) + (int)(yf*0.5f+0.25f)*w1];
-					if(ag1 > pixelTH1*thFactor)
+					float gradient1 = img_gradient_sqr_1[(int)(xf*0.5f+0.25f) + (int)(yf*0.5f+0.25f)*w1];
+					if(gradient1 > pixelTH1*thFactor)
 					{
-						Vec2f ag0d = map0[idx].tail<2>();
-						float dirNorm = fabsf((float)(ag0d.dot(dir3)));
-						if(!setting_selectDirectionDistribution) dirNorm = ag1;
+						Vec2f img_gradient = map0[idx].tail<2>();
+						float dirNorm = fabsf((float)(img_gradient.dot(dir3)));
+						if(!setting_selectDirectionDistribution) dirNorm = gradient1; // this line will NEVER be executed. selectDirectionDistribution is true.
 
 						if(dirNorm > bestVal3)
 						{ bestVal3 = dirNorm; bestIdx3 = idx; bestIdx4 = -2;}
 					}
 					if(bestIdx4==-2) continue;
 
-					float ag2 = mapmax2[(int)(xf*0.25f+0.125) + (int)(yf*0.25f+0.125)*w2];
-					if(ag2 > pixelTH2*thFactor)
+					float gradient2 = img_gradient_sqr_2[(int)(xf*0.25f+0.125) + (int)(yf*0.25f+0.125)*w2];
+					if(gradient2 > pixelTH2*thFactor)
 					{
-						Vec2f ag0d = map0[idx].tail<2>();
-						float dirNorm = fabsf((float)(ag0d.dot(dir4)));
-						if(!setting_selectDirectionDistribution) dirNorm = ag2;
+						Vec2f img_gradient = map0[idx].tail<2>();
+						float dirNorm = fabsf((float)(img_gradient.dot(dir4)));
+						if(!setting_selectDirectionDistribution) dirNorm = gradient2; // this line will NEVER be executed. selectDirectionDistribution is true.
 
 						if(dirNorm > bestVal4)
 						{ bestVal4 = dirNorm; bestIdx4 = idx; }

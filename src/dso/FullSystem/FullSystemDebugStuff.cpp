@@ -279,25 +279,25 @@ namespace dso
 				for(PointHessian* ph : frameHessians[f]->pointHessians)
 				{
 					if(ph==0) continue;
-					if(ph->my_type==0)
+					if(ph->point_type==0)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,0,255));
-					if(ph->my_type==1)
+					if(ph->point_type==1)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,0,0));
-					if(ph->my_type==2)
+					if(ph->point_type==2)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(0,0,255));
-					if(ph->my_type==3)
+					if(ph->point_type==3)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(0,255,255));
 				}
 				for(PointHessian* ph : frameHessians[f]->pointHessiansMarginalized)
 				{
 					if(ph==0) continue;
-					if(ph->my_type==0)
+					if(ph->point_type==0)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,0,255));
-					if(ph->my_type==1)
+					if(ph->point_type==1)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(255,0,0));
-					if(ph->my_type==2)
+					if(ph->point_type==2)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(0,0,255));
-					if(ph->my_type==3)
+					if(ph->point_type==3)
 						img->setPixelCirc(ph->u+0.5f, ph->v+0.5f, Vec3b(0,255,255));
 				}
 

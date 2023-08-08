@@ -220,14 +220,14 @@ void FullSystem::marginalizeFrame(FrameHessian* frame)
 
 
     int numDel = 0;
-    for(auto it = ef->connectivityMap.begin(); it != ef->connectivityMap.end();)
+    for(auto it = ef->frameConnectivityMap.begin(); it != ef->frameConnectivityMap.end();)
     {
         int host = (int)(it->first >> 32);
         int target = (int)(it->first & (uint64_t)0xFFFFFFFF);
         if(host == frameID || target == frameID)
         {
             numDel++;
-            it = ef->connectivityMap.erase(it);
+            it = ef->frameConnectivityMap.erase(it);
         }else
         {
             it++;

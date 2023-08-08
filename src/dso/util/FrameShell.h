@@ -34,7 +34,7 @@ namespace dso
 {
 
 /**
- * @brief class to hold key frame
+ * @brief class to hold key frame information
  * 
  */
 class FrameShell
@@ -46,11 +46,11 @@ public:
 	double timestamp;		// timestamp passed into DSO.
 
 	// set once after tracking
-	SE3 camToTrackingRef;
+	SE3d camToTrackingRef;
 	FrameShell* trackingRef;
 
 	// constantly adapted.
-	SE3 camToWorld;				// Write: TRACKING, while frame is still fresh; MAPPING: only when locked [shellPoseMutex].
+	SE3d camToWorld;				// Write: TRACKING, while frame is still fresh; MAPPING: only when locked [shellPoseMutex].
 	AffLight aff_g2l;	// ??
 	bool poseValid;
 	bool trackingWasGood;
@@ -70,13 +70,13 @@ public:
 		id=0;
 		poseValid=true;
 		trackingWasGood = true;
-		camToWorld = SE3();
+		camToWorld = SE3d();
 		timestamp=0;
 		marginalizedAt=-1;
 		movedByOpt=0;
 		statistics_outlierResOnThis=statistics_goodResOnThis=0;
 		trackingRef=0;
-		camToTrackingRef = SE3();
+		camToTrackingRef = SE3d();
 	}
 };
 

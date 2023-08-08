@@ -35,7 +35,11 @@
 using namespace dmvio;
 using namespace gtsam;
 
-using symbol_shorthand::P, symbol_shorthand::S, symbol_shorthand::V, symbol_shorthand::B, symbol_shorthand::A;
+using symbol_shorthand::P;
+using symbol_shorthand::S;
+using symbol_shorthand::V;
+using symbol_shorthand::B;
+using symbol_shorthand::A;
 
 PoseGraphBundleAdjustment::PoseGraphBundleAdjustment(DelayedMarginalizationGraphs* delayedMarginalizationPassed,
                                                      const IMUCalibration& imuCalibration, const PGBASettings& settings,

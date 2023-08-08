@@ -128,7 +128,7 @@ public:
 	  Eigen::Vector2i,
 	  std::less<uint64_t>,
 	  Eigen::aligned_allocator<std::pair<const uint64_t, Eigen::Vector2i>>
-	  > connectivityMap;
+	  > frameConnectivityMap;
 
 private:
 

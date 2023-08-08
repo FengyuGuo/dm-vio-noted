@@ -93,7 +93,7 @@ extern float setting_minIdepthH_marg;
 
 extern float setting_maxIdepth;
 extern float setting_maxPixSearch;
-extern float setting_desiredImmatureDensity;			// done
+extern float setting_desiredImmatureNum;			// done
 extern float setting_desiredPointDensity;			// done
 extern float setting_minPointsRemaining;
 extern float setting_maxLogAffFacInWindow;

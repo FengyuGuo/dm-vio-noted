@@ -125,8 +125,8 @@ struct FrameHessian
 	//DepthImageWrap* frame;
 	FrameShell* shell;
 
-	Eigen::Vector3f* dI;				 // ?? trace, fine tracking. Used for direction select (not for gradient histograms etc.)
-	Eigen::Vector3f* dIp[PYR_LEVELS];	 // ?? coarse tracking / coarse initializer. NAN in [0] only.
+	Eigen::Vector3f* dI;				 // dI = dIp[0] trace, fine tracking. Used for direction select (not for gradient histograms etc.)
+	Eigen::Vector3f* dIp[PYR_LEVELS];	 // coarse tracking / coarse initializer. NAN in [0] only.
 	float* absSquaredGrad[PYR_LEVELS];  // image gradient. only used for pixel select (histograms etc.). no NAN.
 
     bool addCamPrior;
@@ -152,8 +152,8 @@ struct FrameHessian
 	Vec6 nullspaces_scale;
 
 	// variable info.
-	SE3 worldToCam_evalPT;
-	Vec10 state_zero;
+	SE3d worldToCam_evalPT;
+	Vec10 state_FEJ;
 	Vec10 state_scaled;
 	Vec10 state;	// [0-5: worldToCam-leftEps. 6-7: a,b]
 	Vec10 step;
@@ -161,27 +161,27 @@ struct FrameHessian
 	Vec10 state_backup;
 
 
-    EIGEN_STRONG_INLINE const SE3 &get_worldToCam_evalPT() const {return worldToCam_evalPT;}
-    EIGEN_STRONG_INLINE const Vec10 &get_state_zero() const {return state_zero;} // the first 6 parameters of state_zero seem to be always 0 (as this part ist represented by the worldToCam_evalPT. The last two parameters on the other hand are not zero.
+    EIGEN_STRONG_INLINE const SE3d &get_worldToCam_evalPT() const {return worldToCam_evalPT;}
+    EIGEN_STRONG_INLINE const Vec10 &get_state_FEJ() const {return state_FEJ;} // the first 6 parameters of state_FEJ seem to be always 0 (as this part ist represented by the worldToCam_evalPT. The last two parameters on the other hand are not zero.
     EIGEN_STRONG_INLINE const Vec10 &get_state() const {return state;}
     EIGEN_STRONG_INLINE const Vec10 &get_state_scaled() const {return state_scaled;}
-    EIGEN_STRONG_INLINE const Vec10 get_state_minus_stateZero() const {return get_state() - get_state_zero();}
+    EIGEN_STRONG_INLINE const Vec10 get_state_minus_stateFEJ() const {return get_state() - get_state_FEJ();}
 
 
 	// precalc values
-	SE3 PRE_worldToCam;
-	SE3 PRE_camToWorld;
+	SE3d PRE_worldToCam;
+	SE3d PRE_camToWorld;
 	std::vector<FrameFramePrecalc,Eigen::aligned_allocator<FrameFramePrecalc>> targetPrecalc;
 	MinimalImageB3* debugImage;
 
 
     inline Vec6 w2c_leftEps() const {return get_state_scaled().head<6>();}
     inline AffLight aff_g2l() const {return AffLight(get_state_scaled()[6], get_state_scaled()[7]);}
-    inline AffLight aff_g2l_0() const {return AffLight(get_state_zero()[6]*SCALE_A, get_state_zero()[7]*SCALE_B);}
+    inline AffLight aff_g2l_0() const {return AffLight(get_state_FEJ()[6]*SCALE_A, get_state_FEJ()[7]*SCALE_B);}
 
 
 
-	void setStateZero(const Vec10 &state_zero);
+	void setStateFEJ(const Vec10 &state_FEJ);
 	inline void setState(const Vec10 &state)
 	{
 
@@ -193,7 +193,7 @@ struct FrameHessian
 		state_scaled[8] = SCALE_A * state[8];
 		state_scaled[9] = SCALE_B * state[9];
 
-		PRE_worldToCam = SE3::exp(w2c_leftEps()) * get_worldToCam_evalPT();
+		PRE_worldToCam = SE3d::exp(w2c_leftEps()) * get_worldToCam_evalPT();
 		PRE_camToWorld = PRE_worldToCam.inverse();
 		//setCurrentNullspace();
 	};
@@ -208,28 +208,28 @@ struct FrameHessian
 		state[8] = SCALE_A_INVERSE * state_scaled[8];
 		state[9] = SCALE_B_INVERSE * state_scaled[9];
 
-		PRE_worldToCam = SE3::exp(w2c_leftEps()) * get_worldToCam_evalPT();
+		PRE_worldToCam = SE3d::exp(w2c_leftEps()) * get_worldToCam_evalPT();
 		PRE_camToWorld = PRE_worldToCam.inverse();
 		//setCurrentNullspace();
 	};
-	inline void setEvalPT(const SE3 &worldToCam_evalPT, const Vec10 &state)
+	inline void setEvalPT(const SE3d &worldToCam_evalPT, const Vec10 &state)
 	{
 
 		this->worldToCam_evalPT = worldToCam_evalPT;
 		setState(state);
-		setStateZero(state);
+		setStateFEJ(state);
 	};
 
 
 
-	inline void setEvalPT_scaled(const SE3 &worldToCam_evalPT, const AffLight &aff_g2l)
+	inline void setEvalPT_scaled(const SE3d &worldToCam_evalPT, const AffLight &aff_g2l)
 	{
 		Vec10 initial_state = Vec10::Zero();
 		initial_state[6] = aff_g2l.a;
 		initial_state[7] = aff_g2l.b;
 		this->worldToCam_evalPT = worldToCam_evalPT;
 		setStateScaled(initial_state);
-		setStateZero(this->get_state());
+		setStateFEJ(this->get_state());
 	};
 
 	void release();
@@ -434,7 +434,7 @@ struct PointHessian
 	FrameHessian* host;
 	bool hasDepthPrior;
 
-	float my_type;
+	float point_type;
 
 	float idepth_scaled;
 	float idepth_zero_scaled;

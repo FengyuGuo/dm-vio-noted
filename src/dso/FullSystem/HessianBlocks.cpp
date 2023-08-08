@@ -48,7 +48,7 @@ PointHessian::PointHessian(const ImmaturePoint* const rawPoint, CalibHessian* Hc
 	assert(std::isfinite(rawPoint->idepth_max));
 	//idepth_init = rawPoint->idepth_GT;
 
-	my_type = rawPoint->my_type;
+	point_type = rawPoint->point_type;
 
 	setIdepthScaled((rawPoint->idepth_max + rawPoint->idepth_min)*0.5);
 	setPointStatus(PointHessian::INACTIVE);
@@ -71,30 +71,30 @@ void PointHessian::release()
 }
 
 
-void FrameHessian::setStateZero(const Vec10 &state_zero)
+void FrameHessian::setStateFEJ(const Vec10 &state_FEJ)
 {
-	assert(state_zero.head<6>().squaredNorm() < 1e-20);
+	assert(state_FEJ.head<6>().squaredNorm() < 1e-20);
 
-	this->state_zero = state_zero;
+	this->state_FEJ = state_FEJ;
 
 
 	for(int i=0;i<6;i++)
 	{
 		Vec6 eps; eps.setZero(); eps[i] = 1e-3;
-		SE3 EepsP = Sophus::SE3::exp(eps);
-		SE3 EepsM = Sophus::SE3::exp(-eps);
-		SE3 w2c_leftEps_P_x0 = (get_worldToCam_evalPT() * EepsP) * get_worldToCam_evalPT().inverse();
-		SE3 w2c_leftEps_M_x0 = (get_worldToCam_evalPT() * EepsM) * get_worldToCam_evalPT().inverse();
+		SE3d EepsP = Sophus::SE3d::exp(eps);
+		SE3d EepsM = Sophus::SE3d::exp(-eps);
+		SE3d w2c_leftEps_P_x0 = (get_worldToCam_evalPT() * EepsP) * get_worldToCam_evalPT().inverse();
+		SE3d w2c_leftEps_M_x0 = (get_worldToCam_evalPT() * EepsM) * get_worldToCam_evalPT().inverse();
 		nullspaces_pose.col(i) = (w2c_leftEps_P_x0.log() - w2c_leftEps_M_x0.log())/(2e-3);
 	}
 	//nullspaces_pose.topRows<3>() *= SCALE_XI_TRANS_INVERSE;
 	//nullspaces_pose.bottomRows<3>() *= SCALE_XI_ROT_INVERSE;
 
 	// scale change
-	SE3 w2c_leftEps_P_x0 = (get_worldToCam_evalPT());
+	SE3d w2c_leftEps_P_x0 = (get_worldToCam_evalPT());
 	w2c_leftEps_P_x0.translation() *= 1.00001;
 	w2c_leftEps_P_x0 = w2c_leftEps_P_x0 * get_worldToCam_evalPT().inverse();
-	SE3 w2c_leftEps_M_x0 = (get_worldToCam_evalPT());
+	SE3d w2c_leftEps_M_x0 = (get_worldToCam_evalPT());
 	w2c_leftEps_M_x0.translation() /= 1.00001;
 	w2c_leftEps_M_x0 = w2c_leftEps_M_x0 * get_worldToCam_evalPT().inverse();
 	nullspaces_scale = (w2c_leftEps_P_x0.log() - w2c_leftEps_M_x0.log())/(2e-3);
@@ -168,8 +168,8 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 
 		for(int idx=wl;idx < wl*(hl-1);idx++)
 		{
-			float dx = 0.5f*(dI_l[idx+1][0] - dI_l[idx-1][0]);
-			float dy = 0.5f*(dI_l[idx+wl][0] - dI_l[idx-wl][0]);
+			float dx = 0.5f*(dI_l[idx+1][0] - dI_l[idx-1][0]);	// image gradient in x
+			float dy = 0.5f*(dI_l[idx+wl][0] - dI_l[idx-wl][0]);// image gradient in y
 
 
 			if(!std::isfinite(dx)) dx=0;
@@ -196,13 +196,13 @@ void FrameFramePrecalc::set(FrameHessian* host, FrameHessian* target, CalibHessi
 	this->host = host;
 	this->target = target;
 
-	SE3 leftToLeft_0 = target->get_worldToCam_evalPT() * host->get_worldToCam_evalPT().inverse();
+	SE3d leftToLeft_0 = target->get_worldToCam_evalPT() * host->get_worldToCam_evalPT().inverse();
 	PRE_RTll_0 = (leftToLeft_0.rotationMatrix()).cast<float>();
 	PRE_tTll_0 = (leftToLeft_0.translation()).cast<float>();
 
 
 
-	SE3 leftToLeft = target->PRE_worldToCam * host->PRE_camToWorld;
+	SE3d leftToLeft = target->PRE_worldToCam * host->PRE_camToWorld;
 	PRE_RTll = (leftToLeft.rotationMatrix()).cast<float>();
 	PRE_tTll = (leftToLeft.translation()).cast<float>();
 	distanceLL = leftToLeft.translation().norm();

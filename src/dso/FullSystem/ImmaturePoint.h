@@ -78,7 +78,7 @@ public:
 
 	float quality;
 
-	float my_type;
+	float point_type;
 
 	float idepth_min;
 	float idepth_max;

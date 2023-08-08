@@ -32,7 +32,10 @@
 
 using namespace dmvio;
 using namespace gtsam;
-using symbol_shorthand::P, symbol_shorthand::S, symbol_shorthand::V, symbol_shorthand::B;
+using symbol_shorthand::P;
+using symbol_shorthand::S;
+using symbol_shorthand::V;
+using symbol_shorthand::B;
 
 dmvio::CoarseIMUInitOptimizer::CoarseIMUInitOptimizer(std::shared_ptr<PoseTransformation> transformDSOToIMU,
                                                       const IMUCalibration& imuCalibration,

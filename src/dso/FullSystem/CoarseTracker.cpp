@@ -296,7 +296,7 @@ void CoarseTracker::makeCoarseDepthL0(std::vector<FrameHessian*> frameHessians)
 
 
 
-void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l)
+void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3d &refToNew, AffLight aff_g2l)
 {
 	acc.initialize();
 
@@ -372,7 +372,7 @@ void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &ref
 
 
 
-Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH)
+Vec6 CoarseTracker::calcRes(int lvl, const SE3d &refToNew, AffLight aff_g2l, float cutoffTH)
 {
 	float E = 0;
 	int numTermsInE = 0; // number of points use to compute energy
@@ -563,7 +563,7 @@ void CoarseTracker::setCoarseTrackingRef(
 }
 bool CoarseTracker::trackNewestCoarse(
 		FrameHessian* newFrameHessian,
-		SE3 &lastToNew_out, AffLight &aff_g2l_out,
+		SE3d &lastToNew_out, AffLight &aff_g2l_out,
 		int coarsestLvl,
 		Vec5 minResForAbort,
 		IOWrap::Output3DWrapper* wrap)
@@ -581,7 +581,7 @@ bool CoarseTracker::trackNewestCoarse(
 	int maxIterations[] = {10,20,50,50,50};
 	float lambdaExtrapolationLimit = 0.001;
 
-	SE3 refToNew_current = lastToNew_out;
+	SE3d refToNew_current = lastToNew_out;
 	AffLight aff_g2l_current = aff_g2l_out;
 
 	bool haveRepeated = false;
@@ -631,7 +631,7 @@ bool CoarseTracker::trackNewestCoarse(
             if(lambda < lambdaExtrapolationLimit) extrapFac = sqrt(sqrt(lambdaExtrapolationLimit / lambda));
 
 
-            SE3 refToNew_new;
+            SE3d refToNew_new;
             AffLight aff_g2l_new = aff_g2l_current;
             double incNorm;
             if(dso::setting_useIMU && imuIntegration.isCoarseInitialized())
@@ -644,8 +644,8 @@ bool CoarseTracker::trackNewestCoarse(
                 // Note that we pass H instead of Hl as the lambda multiplication is done inside...
                 refToNew_new = imuIntegration.computeCoarseUpdate(H, b, extrapFac, lambda, incA, incB, incNorm);
 
-				SE3 oldVal = refToNew_current;
-				SE3 newVal = refToNew_new;
+				SE3d oldVal = refToNew_current;
+				SE3d newVal = refToNew_new;
 				dso::Vec6 increment = (newVal * oldVal.inverse()).log();
 
 				dso::Vec8 totalIncrement;
@@ -699,7 +699,7 @@ bool CoarseTracker::trackNewestCoarse(
 
                 // exp: first three: translational part, last three: rotational part.
                 // Note: gtsam::Pose3 contains first rotational and then translational part!
-                refToNew_new = SE3::exp((Vec6) (incScaled.head<6>())) * refToNew_current;
+                refToNew_new = SE3d::exp((Vec6) (incScaled.head<6>())) * refToNew_current;
                 aff_g2l_new = aff_g2l_current;
                 aff_g2l_new.a += incScaled[6];
                 aff_g2l_new.b += incScaled[7];
@@ -952,7 +952,7 @@ CoarseDistanceMap::~CoarseDistanceMap()
 
 
 
-
+// fwdWarpedIDDistFinal is the distance map to points
 void CoarseDistanceMap::makeDistanceMap(
 		std::vector<FrameHessian*> frameHessians,
 		FrameHessian* frame)
@@ -961,7 +961,7 @@ void CoarseDistanceMap::makeDistanceMap(
 	int h1 = h[1];
 	int wh1 = w1*h1;
 	for(int i=0;i<wh1;i++)
-		fwdWarpedIDDistFinal[i] = 1000;
+		fwdWarpedIDDistFinal[i] = 1000; // not visited
 
 
 	// make coarse tracking templates for latstRef.
@@ -971,7 +971,7 @@ void CoarseDistanceMap::makeDistanceMap(
 	{
 		if(frame == fh) continue;
 
-		SE3 fhToNew = frame->PRE_worldToCam * fh->PRE_camToWorld;
+		SE3d fhToNew = frame->PRE_worldToCam * fh->PRE_camToWorld;
 		Mat33f KRKi = (K[1] * fhToNew.rotationMatrix().cast<float>() * Ki[0]);
 		Vec3f Kt = (K[1] * fhToNew.translation().cast<float>());
 
@@ -982,8 +982,8 @@ void CoarseDistanceMap::makeDistanceMap(
 			int u = ptp[0] / ptp[2] + 0.5f;
 			int v = ptp[1] / ptp[2] + 0.5f;
 			if(!(u > 0 && v > 0 && u < w[1] && v < h[1])) continue;
-			fwdWarpedIDDistFinal[u+w1*v]=0;
-			bfsList1[numItems] = Eigen::Vector2i(u,v);
+			fwdWarpedIDDistFinal[u+w1*v]=0; // feature point
+			bfsList1[numItems] = Eigen::Vector2i(u,v); // predicted point position in current frame
 			numItems++;
 		}
 	}
@@ -1005,7 +1005,7 @@ void CoarseDistanceMap::growDistBFS(int bfsNum)
 {
 	assert(w[0] != 0);
 	int w1 = w[1], h1 = h[1];
-	for(int k=1;k<40;k++)
+	for(int k=1;k<40;k++) 
 	{
 		int bfsNum2 = bfsNum;
 		std::swap<Eigen::Vector2i*>(bfsList1,bfsList2);

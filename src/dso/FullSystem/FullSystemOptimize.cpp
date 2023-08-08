@@ -413,18 +413,18 @@ void FullSystem::printOptRes(const Vec3 &res, double resL, double resM, double r
 
 }
 
-
+/**
+ * @brief finally we optimize the matrix
+ * 
+ * @param mnumOptIts 
+ * @return float 
+ */
 float FullSystem::optimize(int mnumOptIts)
 {
     dmvio::TimeMeasurement timeMeasurement("FullSystemOptimize");
 	if(frameHessians.size() < 2) return 0;
 	if(frameHessians.size() < 3) mnumOptIts = 20;
-	if(frameHessians.size() < 4) mnumOptIts = 15;
-
-
-
-
-
+	if(frameHessians.size() < 4) mnumOptIts = 15; // if frames are not so many, optimize with more iterations
 
 	// get statistics and active residuals.
 
@@ -452,12 +452,8 @@ float FullSystem::optimize(int mnumOptIts)
 
 
 	Vec3 lastEnergy = linearizeAll(false);
-	double lastEnergyL = calcLEnergy();
-	double lastEnergyM = calcMEnergy(false);
-
-
-
-
+	double lastEnergyL = calcLEnergy();		// visual residual?
+	double lastEnergyM = calcMEnergy(false);// imu residual?
 
 	if(multiThreading)
 		treadReduce.reduce(boost::bind(&FullSystem::applyRes_Reductor, this, true, _1, _2, _3, _4), 0, activeResiduals.size(), 50);
@@ -482,7 +478,7 @@ float FullSystem::optimize(int mnumOptIts)
 	float stepsize=1;
 	VecX previousX = VecX::Constant(CPARS+ 8*frameHessians.size(), NAN);
 	int numIterations = 0;
-	for(int iteration=0;iteration<mnumOptIts;iteration++)
+	for(int iteration=0;iteration<mnumOptIts;iteration++) // running damped GN method to optimize slide window
 	{
 	    dmvio::TimeMeasurement timeMeasurement("baIteration");
 		// solve!
@@ -603,19 +599,13 @@ float FullSystem::optimize(int mnumOptIts)
 	ef->setAdjointsF(&Hcalib);
 	setPrecalcValues();
 
-
-
-
 	lastEnergy = linearizeAll(true);
-
-
 
 	if(!std::isfinite((double)lastEnergy[0]) || !std::isfinite((double)lastEnergy[1]) || !std::isfinite((double)lastEnergy[2]))
 	{
 		std::cout << "Tracking lost after bundle adjustment!" << std::endl;
 		isLost = true;
 	}
-
 
 	statistics_lastFineTrackRMSE = sqrtf((float)(lastEnergy[0] / (patternNum*ef->resInA)));
 
@@ -637,7 +627,6 @@ float FullSystem::optimize(int mnumOptIts)
 		}
 	}
 
-
     baIntegration->postOptimization(ef->frames);
 
 	debugPlotTracking();
@@ -652,7 +641,7 @@ float FullSystem::optimize(int mnumOptIts)
 
 void FullSystem::solveSystem(int iteration, double lambda)
 {
-	ef->lastNullspaces_forLogging = getNullspaces(
+	ef->lastNullspaces_forLogging = getNullspaces(		// why null spaces?
 			ef->lastNullspaces_pose,
 			ef->lastNullspaces_scale,
 			ef->lastNullspaces_affA,

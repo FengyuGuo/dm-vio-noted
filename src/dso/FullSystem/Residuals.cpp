@@ -74,6 +74,12 @@ PointFrameResidual::PointFrameResidual(PointHessian* point_, FrameHessian* host_
 
 
 
+/**
+ * @brief core part to evaluate photometric residual and relative jacobians
+ * 
+ * @param HCalib 
+ * @return double 
+ */
 
 double PointFrameResidual::linearize(CalibHessian* HCalib)
 {

@@ -339,7 +339,7 @@ void BAGTSAMIntegration::computeEvaluationPointValues(const std::vector<dso::EFF
     // Replace current value with FEJ value for poses and affine brightness.
     for(dso::EFFrame* h : frames)
     {
-        dso::Vec10 stateZero = h->data->get_state_zero();
+        dso::Vec10 stateZero = h->data->get_state_FEJ();
         Sophus::SE3d evalPoint = h->data->get_worldToCam_evalPT();
         gtsam::Pose3 pose(evalPoint.matrix());
         assert(stateZero.segment(0, 6).norm() == 0);

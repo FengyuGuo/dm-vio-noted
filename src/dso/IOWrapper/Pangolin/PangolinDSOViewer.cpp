@@ -160,7 +160,7 @@ void PangolinDSOViewer::run()
 
 
 	pangolin::Var<int> settings_nPts("ui.activePoints",setting_desiredPointDensity, 50,5000, false);
-	pangolin::Var<int> settings_nCandidates("ui.pointCandidates",setting_desiredImmatureDensity, 50,5000, false);
+	pangolin::Var<int> settings_nCandidates("ui.pointCandidates",setting_desiredImmatureNum, 50,5000, false);
 	pangolin::Var<int> settings_nMaxFrames("ui.maxFrames",setting_maxFrames, 4,10, false);
 	pangolin::Var<double> settings_kfFrequency("ui.kfFrequency",setting_kfGlobalWeight,0.1,3, false);
 	pangolin::Var<double> settings_gradHistAdd("ui.minGradAdd",setting_minGradHistAdd,0,15, false);
@@ -326,7 +326,7 @@ void PangolinDSOViewer::run()
 	    this->settings_sparsity = settings_sparsity.Get();
 
 	    setting_desiredPointDensity = settings_nPts.Get();
-	    setting_desiredImmatureDensity = settings_nCandidates.Get();
+	    setting_desiredImmatureNum = settings_nCandidates.Get();
 	    setting_maxFrames = settings_nMaxFrames.Get();
 	    setting_kfGlobalWeight = settings_kfFrequency.Get();
 	    setting_minGradHistAdd = settings_gradHistAdd.Get();
@@ -628,7 +628,7 @@ void PangolinDSOViewer::publishSystemStatus(dmvio::SystemStatus systemStatus)
     this->systemStatus = systemStatus;
 }
 
-void PangolinDSOViewer::addGTCamPose(const Sophus::SE3& gtPose)
+void PangolinDSOViewer::addGTCamPose(const Sophus::SE3d& gtPose)
 {
 	boost::unique_lock<boost::mutex> lk(model3DMutex);
 
@@ -656,15 +656,15 @@ void PangolinDSOViewer::updateDisplayedCamPose()
 
     // The visualizer shows cam to world in dso scale. The groundtruth pose is imu to world in metric scale.
     // This transforms to worldToCam
-    SE3 worldToCam(transformDSOToIMU->transformPoseInverse(gtCamPoseMetric.matrix()));
+    SE3d worldToCam(transformDSOToIMU->transformPoseInverse(gtCamPoseMetric.matrix()));
 
-    SE3 firstGTWorldToCam(transformDSOToIMU->transformPoseInverse(firstGTCamPoseMetric.matrix()));
+    SE3d firstGTWorldToCam(transformDSOToIMU->transformPoseInverse(firstGTCamPoseMetric.matrix()));
 
     // We want the first pose to stay the same:
     // firstPose = offset * gtFirstPose;
     // --> offset = firstPose * gtFirstPose^(-1)
-    SE3 offset = firstCamPoseDSO * firstGTWorldToCam;
-    SE3 gtPoseTransformed =  offset * worldToCam.inverse();
+    SE3d offset = firstCamPoseDSO * firstGTWorldToCam;
+    SE3d gtPoseTransformed =  offset * worldToCam.inverse();
 
     currentGTCam->setFromPose(gtPoseTransformed, HCalib);
 

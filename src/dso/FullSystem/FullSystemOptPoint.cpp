@@ -106,7 +106,7 @@ PointHessian* FullSystem::optimizeImmaturePoint(
 
 		float newHdd=0; float newbd=0; float newEnergy=0;
 		for(int i=0;i<nres;i++)
-			newEnergy += point->linearizeResidual(&Hcalib, 1, residuals+i,newHdd, newbd, newIdepth);
+			newEnergy += point->linearizeResidual(&Hcalib, 1, residuals+i,newHdd, newbd, newIdepth); // calculate residual and relative matrix for optimize inverse depth
 
 		if(!std::isfinite(lastEnergy) || newHdd < setting_minIdepthH_act)
 		{
@@ -166,42 +166,42 @@ PointHessian* FullSystem::optimizeImmaturePoint(
 
 
 
-	PointHessian* p = new PointHessian(point, &Hcalib);
-	if(!std::isfinite(p->energyTH)) {delete p; return (PointHessian*)((long)(-1));}
+	PointHessian* point_hessian = new PointHessian(point, &Hcalib);
+	if(!std::isfinite(point_hessian->energyTH)) {delete point_hessian; return (PointHessian*)((long)(-1));}
 
-	p->lastResiduals[0].first = 0;
-	p->lastResiduals[0].second = ResState::OOB;
-	p->lastResiduals[1].first = 0;
-	p->lastResiduals[1].second = ResState::OOB;
-	p->setIdepthZero(currentIdepth);
-	p->setIdepth(currentIdepth);
-	p->setPointStatus(PointHessian::ACTIVE);
+	point_hessian->lastResiduals[0].first = 0;
+	point_hessian->lastResiduals[0].second = ResState::OOB;
+	point_hessian->lastResiduals[1].first = 0;
+	point_hessian->lastResiduals[1].second = ResState::OOB;
+	point_hessian->setIdepthZero(currentIdepth);
+	point_hessian->setIdepth(currentIdepth);
+	point_hessian->setPointStatus(PointHessian::ACTIVE);
 
 	for(int i=0;i<nres;i++)
 		if(residuals[i].state_state == ResState::IN)
 		{
-			PointFrameResidual* r = new PointFrameResidual(p, p->host, residuals[i].target);
+			PointFrameResidual* r = new PointFrameResidual(point_hessian, point_hessian->host, residuals[i].target);
 			r->state_NewEnergy = r->state_energy = 0;
 			r->state_NewState = ResState::OUTLIER;
 			r->setState(ResState::IN);
-			p->residuals.push_back(r);
+			point_hessian->residuals.push_back(r);
 
 			if(r->target == frameHessians.back())
 			{
-				p->lastResiduals[0].first = r;
-				p->lastResiduals[0].second = ResState::IN;
+				point_hessian->lastResiduals[0].first = r;
+				point_hessian->lastResiduals[0].second = ResState::IN;
 			}
 			else if(r->target == (frameHessians.size()<2 ? 0 : frameHessians[frameHessians.size()-2]))
 			{
-				p->lastResiduals[1].first = r;
-				p->lastResiduals[1].second = ResState::IN;
+				point_hessian->lastResiduals[1].first = r;
+				point_hessian->lastResiduals[1].second = ResState::IN;
 			}
 		}
 
 	if(print) printf("point activated!\n");
 
 	statistics_numActivatedPoints++;
-	return p;
+	return point_hessian;
 }
 
 

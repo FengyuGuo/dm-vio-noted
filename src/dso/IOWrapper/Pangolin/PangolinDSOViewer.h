@@ -83,7 +83,7 @@ public:
     virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override;
     virtual void publishSystemStatus(dmvio::SystemStatus systemStatus) override;
 
-    void addGTCamPose(const Sophus::SE3& gtPose);
+    void addGTCamPose(const Sophus::SE3d& gtPose);
 
     virtual void pushLiveFrame(FrameHessian* image) override;
     virtual void pushDepthImage(MinimalImageB3* image) override;
@@ -151,9 +151,9 @@ private:
 	std::deque<float> lastNMappingMs;
 
 	// GT cam poses
-	SE3 gtCamPoseMetric; // in metric frame, but will be displayed in DSO frame using.
-	SE3 firstCamPoseDSO; // DSO pose corresponding to the first groundtruth pose.
-	SE3 firstGTCamPoseMetric;
+	SE3d gtCamPoseMetric; // in metric frame, but will be displayed in DSO frame using.
+	SE3d firstCamPoseDSO; // DSO pose corresponding to the first groundtruth pose.
+	SE3d firstGTCamPoseMetric;
 	bool gtCamPoseSet = false;
 	std::unique_ptr<dmvio::TransformDSOToIMU> transformDSOToIMU;
     dmvio::SystemStatus systemStatus;
