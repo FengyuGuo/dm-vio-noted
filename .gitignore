@@ -3,3 +3,4 @@ build/
 configs/archwalk_cam_chain.yaml
 configs/camera_archwalk.txt
 configs/archwalk.yaml
+configs/mynteye/*

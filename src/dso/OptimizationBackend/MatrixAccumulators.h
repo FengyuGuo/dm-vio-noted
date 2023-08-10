@@ -1098,7 +1098,7 @@ public:
    * 
    * construct the hessian matrix
    */
-  inline void updateSSE_eighted(
+  inline void updateSSE_weighted(
 		  const __m128 J0,const __m128 J1,
 		  const __m128 J2,const __m128 J3,
 		  const __m128 J4,const __m128 J5,

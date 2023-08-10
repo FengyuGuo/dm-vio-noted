@@ -89,7 +89,7 @@ bool CoarseInitializer::trackFrame(FrameHessian *newFrameHessian, std::vector<IO
     for(IOWrap::Output3DWrapper* ow : wraps)
         ow->pushLiveFrame(newFrameHessian);
 
-	int maxIterations[] = {5,5,10,30,50};
+	int maxIterations[] = {5,5,10,30,50}; // iteration in different level
 
 
 	alphaK = 2.5*2.5;//*freeDebugParam1*freeDebugParam1;
@@ -123,7 +123,7 @@ bool CoarseInitializer::trackFrame(FrameHessian *newFrameHessian, std::vector<IO
 
 
 	Vec3f latestRes = Vec3f::Zero();
-	for(int lvl=pyrLevelsUsed-1; lvl>=0; lvl--)
+	for(int lvl=pyrLevelsUsed-1; lvl>=0; lvl--) // from coarse to fine
 	{
 
 		if(lvl<pyrLevelsUsed-1)
@@ -381,16 +381,16 @@ Vec3f CoarseInitializer::calcResAndGS(
                 continue;
             }
 
-            VecNRf dp0;
-            VecNRf dp1;
-            VecNRf dp2;
-            VecNRf dp3;
-            VecNRf dp4;
-            VecNRf dp5;
-            VecNRf dp6;
-            VecNRf dp7;
-            VecNRf dd;
-            VecNRf r;
+            VecNRf dp0; // d res / d tx
+            VecNRf dp1; // d res / d ty
+            VecNRf dp2; // d res / d tz
+            VecNRf dp3; // d res / d rx
+            VecNRf dp4; // d res / d ry
+            VecNRf dp5; // d res / d rz
+            VecNRf dp6; // d res / d a
+            VecNRf dp7; // d res / d b
+            VecNRf dd; // d res / d inverse_depth
+            VecNRf residual_pattern;
             JbBuffer_new[i].setZero();
 
             // sum over all residuals.
@@ -418,37 +418,37 @@ Vec3f CoarseInitializer::calcResAndGS(
                 Vec3f hitColor = getInterpolatedElement33(colorNew, Ku, Kv, wl);
                 //Vec3f hitColor = getInterpolatedElement33BiCub(colorNew, Ku, Kv, wl);
 
-                //float rlR = colorRef[point->u+dx + (point->v+dy) * wl][0];
-                float rlR = getInterpolatedElement31(colorRef, point->u + dx, point->v + dy, wl);
+                //float rawColor = colorRef[point->u+dx + (point->v+dy) * wl][0];
+                float rawColor = getInterpolatedElement31(colorRef, point->u + dx, point->v + dy, wl);
 
-                if(!std::isfinite(rlR) || !std::isfinite((float) hitColor[0]))
+                if(!std::isfinite(rawColor) || !std::isfinite((float) hitColor[0]))
                 {
                     isGood = false;
                     break;
                 }
 
 
-                float residual = hitColor[0] - r2new_aff[0] * rlR - r2new_aff[1];
-                float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
-                energy += hw * residual * residual * (2 - hw);
+                float residual = hitColor[0] - r2new_aff[0] * rawColor - r2new_aff[1];
+                float huber_weight = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+                energy += huber_weight * residual * residual * (2 - huber_weight);
 
 
                 float dxdd = (t[0] - t[2] * u) / pt[2];
                 float dydd = (t[1] - t[2] * v) / pt[2];
 
-                if(hw < 1) hw = sqrtf(hw);
-                float dxInterp = hw * hitColor[1] * fxl;
-                float dyInterp = hw * hitColor[2] * fyl;
+                if(huber_weight < 1) huber_weight = sqrtf(huber_weight);
+                float dxInterp = huber_weight * hitColor[1] * fxl;
+                float dyInterp = huber_weight * hitColor[2] * fyl;
                 dp0[idx] = new_idepth * dxInterp;
                 dp1[idx] = new_idepth * dyInterp;
                 dp2[idx] = -new_idepth * (u * dxInterp + v * dyInterp);
                 dp3[idx] = -u * v * dxInterp - (1 + v * v) * dyInterp;
                 dp4[idx] = (1 + u * u) * dxInterp + u * v * dyInterp;
                 dp5[idx] = -v * dxInterp + u * dyInterp;
-                dp6[idx] = -hw * r2new_aff[0] * rlR;
-                dp7[idx] = -hw * 1;
+                dp6[idx] = -huber_weight * r2new_aff[0] * rawColor;
+                dp7[idx] = -huber_weight * 1;
                 dd[idx] = dxInterp * dxdd + dyInterp * dydd;
-                r[idx] = hw * residual;
+                residual_pattern[idx] = huber_weight * residual;
 
                 float maxstep = 1.0f / Vec2f(dxdd * fxl, dydd * fyl).norm();
                 if(maxstep < point->maxstep) point->maxstep = maxstep;
@@ -462,7 +462,7 @@ Vec3f CoarseInitializer::calcResAndGS(
                 JbBuffer_new[i][5] += dp5[idx] * dd[idx];
                 JbBuffer_new[i][6] += dp6[idx] * dd[idx];
                 JbBuffer_new[i][7] += dp7[idx] * dd[idx];
-                JbBuffer_new[i][8] += r[idx] * dd[idx];
+                JbBuffer_new[i][8] += residual_pattern[idx] * dd[idx];
                 JbBuffer_new[i][9] += dd[idx] * dd[idx];
             }
 
@@ -491,14 +491,14 @@ Vec3f CoarseInitializer::calcResAndGS(
                         _mm_load_ps(((float*) (&dp5)) + i),
                         _mm_load_ps(((float*) (&dp6)) + i),
                         _mm_load_ps(((float*) (&dp7)) + i),
-                        _mm_load_ps(((float*) (&r)) + i));
+                        _mm_load_ps(((float*) (&residual_pattern)) + i));
 
 
             for(int i = ((patternNum >> 2) << 2); i < patternNum; i++)
                 acc9.updateSingle(
                         (float) dp0[i], (float) dp1[i], (float) dp2[i], (float) dp3[i],
                         (float) dp4[i], (float) dp5[i], (float) dp6[i], (float) dp7[i],
-                        (float) r[i]);
+                        (float) residual_pattern[i]);
 
 
         }

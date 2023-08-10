@@ -331,7 +331,7 @@ void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3d &re
 		 * residual
 		 * huber_weight
 		 */
-		acc.updateSSE_eighted(
+		acc.updateSSE_weighted(
 				_mm_mul_ps(id,dx), // 1.0 / depth * di / dx * fx
 				_mm_mul_ps(id,dy), // 1.0 / depth * di / dy * fy
 				_mm_sub_ps(zero, _mm_mul_ps(id,_mm_add_ps(_mm_mul_ps(u,dx), _mm_mul_ps(v,dy)))), // -1.0 / depth * (u * di / dx * fx + v * di / dy * fy)
